@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0 .                                 *
+ * This file is part of 3D-ICE, version 1.0.1 .                               *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -12,7 +12,7 @@
  * more details.                                                              *
  *                                                                            *
  * You should have  received a copy of  the GNU General  Public License along *
- * with 3D-ICe. If not, see <http://www.gnu.org/licenses/>.                   *
+ * with 3D-ICE. If not, see <http://www.gnu.org/licenses/>.                   *
  *                                                                            *
  *                             Copyright (C) 2010                             *
  *   Embedded Systems Laboratory - Ecole Polytechnique Federale de Lausanne   *
@@ -25,7 +25,7 @@
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
- * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *                                                                            *
+ * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -390,8 +390,6 @@ void fill_sources_stack_description
 )
 {
   StackElement* stack_element      = NULL ;
-  StackElement* last_stack_element = NULL;
-  Source_t*     tmp_sources        = sources ;
 
 #ifdef PRINT_SOURCES
   fprintf (stderr,
@@ -405,7 +403,6 @@ void fill_sources_stack_description
   (
     stack_element = stkd->StackElementsList ;
     stack_element != NULL ;
-    last_stack_element = stack_element,
     stack_element      = stack_element->Next
   )
 
@@ -413,35 +410,45 @@ void fill_sources_stack_description
     {
       case TDICE_STACK_ELEMENT_DIE :
 
-        tmp_sources = fill_sources_die
-                      (
-#                       ifdef PRINT_SOURCES
-                        stack_element->LayersOffset,
-#                       endif
-                        stack_element->Pointer.Die,
-                        stack_element->Floorplan,
-                        tmp_sources,
-                        stkd->Dimensions
-                      ) ;
+        sources = fill_sources_die
+                  (
+                    stack_element->LayersOffset,
+                    stack_element->Pointer.Die,
+                    stkd->ConventionalHeatSink,
+                    conductances,
+                    stack_element->Floorplan,
+                    sources,
+                    stkd->Dimensions
+                  ) ;
 
         break ;
 
       case TDICE_STACK_ELEMENT_LAYER :
 
-        tmp_sources += get_layer_area (stkd->Dimensions) ;
+        sources = fill_sources_empty_layer
+                  (
+#                   ifdef PRINT_SOURCES
+                    stack_element->Pointer.Layer,
+#                   endif
+                    stack_element->LayersOffset,
+                    stkd->ConventionalHeatSink,
+                    conductances,
+                    sources,
+                    stkd->Dimensions
+                  ) ;
         break ;
 
       case TDICE_STACK_ELEMENT_CHANNEL :
 
-        tmp_sources = fill_sources_channel
-                      (
-#                       ifdef PRINT_SOURCES
-                        stack_element->LayersOffset,
-#                       endif
-                        stkd->Channel,
-                        tmp_sources,
-                        stkd->Dimensions
-                      ) ;
+        sources = fill_sources_channel
+                  (
+#                   ifdef PRINT_SOURCES
+                    stack_element->LayersOffset,
+#                   endif
+                    stkd->Channel,
+                    sources,
+                    stkd->Dimensions
+                  ) ;
         break ;
 
       case TDICE_STACK_ELEMENT_NONE :
@@ -456,32 +463,6 @@ void fill_sources_stack_description
         return ;
 
     } /* switch stack_element->Type */
-
-  if (stkd->ConventionalHeatSink != NULL)
-  {
-    if (last_stack_element->Type == TDICE_STACK_ELEMENT_DIE)
-
-        add_sources_conventional_heat_sink
-        (
-          stkd->ConventionalHeatSink,
-          stkd->Dimensions,
-          sources,
-          conductances,
-          last_stack_element->LayersOffset
-          + last_stack_element->Pointer.Die->NLayers
-        ) ;
-
-    else if (last_stack_element->Type == TDICE_STACK_ELEMENT_LAYER)
-
-        add_sources_conventional_heat_sink
-        (
-          stkd->ConventionalHeatSink,
-          stkd->Dimensions,
-          sources,
-          conductances,
-          last_stack_element->LayersOffset
-        ) ;
-  }
 }
 
 /******************************************************************************/

@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0 .                                 *
+ * This file is part of 3D-ICE, version 1.0.1 .                               *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -12,7 +12,7 @@
  * more details.                                                              *
  *                                                                            *
  * You should have  received a copy of  the GNU General  Public License along *
- * with 3D-ICe. If not, see <http://www.gnu.org/licenses/>.                   *
+ * with 3D-ICE. If not, see <http://www.gnu.org/licenses/>.                   *
  *                                                                            *
  *                             Copyright (C) 2010                             *
  *   Embedded Systems Laboratory - Ecole Polytechnique Federale de Lausanne   *
@@ -25,7 +25,7 @@
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
- * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *                                                                            *
+ * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -85,7 +85,7 @@ void print_conventional_heat_sink
 
 /******************************************************************************/
 
-void add_sources_conventional_heat_sink
+void fill_sources_conventional_heat_sink
 (
   ConventionalHeatSink* conventionalheatsink,
   Dimensions*           dimensions,
@@ -96,15 +96,13 @@ void add_sources_conventional_heat_sink
 {
   RowIndex_t    row ;
   ColumnIndex_t column ;
-  Quantity_t offset = get_cell_offset_in_stack (dimensions, layer, 0, 0) ;
 
 #ifdef PRINT_SOURCES
   fprintf (stderr,
     "current_layer = %d\tadd_sources_conventional_heat_sink\n", layer) ;
 #endif
 
-  sources      += offset;
-  conductances += offset ;
+  conductances += get_cell_offset_in_stack (dimensions, layer, 0, 0) ;
 
   for
   (
@@ -122,15 +120,61 @@ void add_sources_conventional_heat_sink
       conductances++
     )
     {
-
-      *sources += conventionalheatsink->AmbientTemperature * conductances->Top ;
-
+      *sources = (conventionalheatsink->AmbientTemperature * conductances->Top) ;
 #ifdef PRINT_SOURCES
         fprintf (stderr,
-          "solid  cell  |  l %2d r %4d c %4d [%6d] | += %f * %.5e -> %.5e\n",
+          "solid  cell  |  l %2d r %4d c %4d [%6d] | = %f * %.5e = %.5e\n",
           layer, row, column,
           get_cell_offset_in_stack (dimensions, layer, row, column),
-          conventionalheatsink->AmbientT, conductances->Top, *sources);
+          conventionalheatsink->AmbientTemperature, conductances->Top, *sources);
+#endif
+    }
+}
+
+/******************************************************************************/
+
+void add_sources_conventional_heat_sink
+(
+  ConventionalHeatSink* conventionalheatsink,
+  Dimensions*           dimensions,
+  Source_t*             sources,
+  Conductances*         conductances,
+  LayerIndex_t          layer
+)
+{
+  RowIndex_t    row ;
+  ColumnIndex_t column ;
+
+#ifdef PRINT_SOURCES
+  fprintf (stderr,
+    "current_layer = %d\tadd_sources_conventional_heat_sink\n", layer) ;
+#endif
+
+  conductances += get_cell_offset_in_stack (dimensions, layer, 0, 0) ;
+
+  for
+  (
+    row = 0 ;
+    row < get_number_of_rows (dimensions) ;
+    row++
+  )
+
+    for
+    (
+      column = 0 ;
+      column < get_number_of_columns (dimensions) ;
+      column++ ,
+      sources++ ,
+      conductances++
+    )
+    {
+      *sources += (conventionalheatsink->AmbientTemperature * conductances->Top) ;
+#ifdef PRINT_SOURCES
+        fprintf (stderr,
+          "solid  cell  |  l %2d r %4d c %4d [%6d] | += %f * %.5e = %.5e\n",
+          layer, row, column,
+          get_cell_offset_in_stack (dimensions, layer, row, column),
+          conventionalheatsink->AmbientTemperature, conductances->Top, *sources);
 #endif
     }
 }

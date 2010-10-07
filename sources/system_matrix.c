@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0 .                                 *
+ * This file is part of 3D-ICE, version 1.0.1 .                               *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -12,7 +12,7 @@
  * more details.                                                              *
  *                                                                            *
  * You should have  received a copy of  the GNU General  Public License along *
- * with 3D-ICe. If not, see <http://www.gnu.org/licenses/>.                   *
+ * with 3D-ICE. If not, see <http://www.gnu.org/licenses/>.                   *
  *                                                                            *
  *                             Copyright (C) 2010                             *
  *   Embedded Systems Laboratory - Ecole Polytechnique Federale de Lausanne   *
@@ -25,7 +25,7 @@
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
- * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *                                                                            *
+ * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -206,7 +206,7 @@ Quantity_t add_solid_column
 #ifdef PRINT_SYSTEM_MATRIX
   fprintf (stderr, "  diagonal\t%d\t ", *(row_indices-1)) ;
   fgetpos (stderr, &diag_fposition) ;
-  if (environmentheatsink != NULL)
+  if (conventionalheatsink != NULL)
     fprintf (stderr, "            ( + %.5e [capacity] + %.5e [ehtc N])\n",
              *capacities, conductances->Top) ;
   else

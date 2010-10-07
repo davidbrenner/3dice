@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0 .                                 *
+ * This file is part of 3D-ICE, version 1.0.1 .                               *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -12,7 +12,7 @@
  * more details.                                                              *
  *                                                                            *
  * You should have  received a copy of  the GNU General  Public License along *
- * with 3D-ICe. If not, see <http://www.gnu.org/licenses/>.                   *
+ * with 3D-ICE. If not, see <http://www.gnu.org/licenses/>.                   *
  *                                                                            *
  *                             Copyright (C) 2010                             *
  *   Embedded Systems Laboratory - Ecole Polytechnique Federale de Lausanne   *
@@ -25,7 +25,7 @@
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
- * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *                                                                            *
+ * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -207,16 +207,16 @@ Capacity_t* fill_capacities_die
 
 Source_t* fill_sources_die
 (
-# ifdef PRINT_SOURCES
-  LayerIndex_t current_layer,
-# endif
-  Die*         die,
-  Floorplan*   floorplan,
-  Source_t*    sources,
-  Dimensions*  dimensions
+  LayerIndex_t          current_layer,
+  Die*                  die,
+  ConventionalHeatSink* conventionalheatsink,
+  Conductances*         conductances,
+  Floorplan*            floorplan,
+  Source_t*             sources,
+  Dimensions*           dimensions
 )
 {
-  Layer* layer ;
+  Layer* layer = NULL ;
 
 #ifdef PRINT_SOURCES
   fprintf (stderr,
@@ -236,9 +236,11 @@ Source_t* fill_sources_die
       sources = fill_sources_active_layer
                 (
 #                 ifdef PRINT_SOURCES
-                  current_layer + layer->LayersOffset,
                   layer,
 #                 endif
+                  current_layer + layer->LayersOffset,
+                  conventionalheatsink,
+                  conductances,
                   floorplan,
                   sources,
                   dimensions
@@ -249,9 +251,11 @@ Source_t* fill_sources_die
       sources = fill_sources_empty_layer
                 (
 #                 ifdef PRINT_SOURCES
-                  current_layer + layer->LayersOffset,
                   layer,
 #                 endif
+                  current_layer + layer->LayersOffset,
+                  conventionalheatsink,
+                  conductances,
                   sources,
                   dimensions
                 ) ;
