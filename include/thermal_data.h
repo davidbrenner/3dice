@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.1 .                               *
+ * This file is part of 3D-ICE, version 1.0.2 .                               *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -69,8 +69,11 @@ extern "C"
     Time_t StepTime ;
     Time_t SlotTime ;
 
-    Time_t CurrentTime ;
-    Time_t CurrentSlotLimit ;
+    /* Quantities used for simulation */
+
+    Quantity_t SlotLength ;
+
+    Quantity_t CurrentTime ;
 
     /* The matrix A representing the linear system */
 
@@ -166,10 +169,8 @@ extern "C"
   /*                                                                        */
   /* Returns                                                                */
   /*                                                                        */
-  /*  -1 if the tdata.SM_A hasn't been factored before                      */
-  /*   0 if the emulation succeeded,                                        */
   /*   1 if the time slots are over,                                        */
-  /*   2 if the time reached the end of a time slot,                        */
+  /*   0 if the emulation succeeded (step consumed),                        */
   /*  <0 if there have been a problem with the computation of the solution  */
   /*     of the linear system. See the "info" prameter of "dgstrs" in       */
   /*     SuperLU.                                                           */
@@ -182,9 +183,8 @@ extern "C"
   /*                                                                        */
   /* Returns                                                                */
   /*                                                                        */
-  /*  -1 if the tdata.SM_A hasn't been factored before                      */
-  /*   0 if the emulation succeeded,                                        */
   /*   1 if the time slots are over                                         */
+  /*   0 if the emulation succeeded (slot consumed),                        */
   /*  <0 if there have been a problem with the computation of the solution  */
   /*     of the linear system. See the "info" prameter of "dgstrs"          */
   /*     in SuperLU.                                                        */

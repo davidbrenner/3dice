@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.1 .                               *
+ * This file is part of 3D-ICE, version 1.0.2 .                               *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -90,8 +90,9 @@ void init_thermal_data
   tdata->StepTime = step_time ;
   tdata->SlotTime = slot_time ;
 
-  tdata->CurrentTime      = 0.0 ;
-  tdata->CurrentSlotLimit = 0.0 ;
+  tdata->SlotLength = (Quantity_t) ( slot_time / step_time ) ;
+
+  tdata->CurrentTime = 0 ;
 
   tdata->InitialTemperature = initial_temperature ;
 
@@ -289,7 +290,7 @@ void free_thermal_data (ThermalData* tdata)
 
 Time_t get_current_time(ThermalData* tdata)
 {
-  return tdata->CurrentTime ;
+  return tdata->CurrentTime * tdata->StepTime ;
 }
 
 /******************************************************************************/
@@ -298,25 +299,16 @@ int emulate_step (ThermalData* tdata, StackDescription* stkd)
 {
   int count;
 
-  if (tdata->SLU_Options.Fact != FACTORED)
-  {
-    fprintf (stderr, "call fill_thermal_data before emulating\n");
-    return -1 ;
-  }
-
-  if (tdata->CurrentTime >= tdata->CurrentSlotLimit)
+  if (tdata->CurrentTime % tdata->SlotLength == 0)
   {
     if (get_number_of_remaining_power_values(stkd) == 0)
 
       return 1 ;
 
-    fill_sources_stack_description (stkd, tdata->Sources, tdata->Conductances) ;
-
-    tdata->CurrentSlotLimit += tdata->SlotTime ;
-
-    if (tdata->CurrentTime != 0.0)
-
-      return 2 ;
+    fill_sources_stack_description
+    (
+      stkd, tdata->Sources, tdata->Conductances
+    ) ;
   }
 
   for(count = 0 ; count < tdata->Size ; count++)
@@ -340,11 +332,11 @@ int emulate_step (ThermalData* tdata, StackDescription* stkd)
 
   if (tdata->SLU_Info < 0)
   {
-    fprintf (stderr, "Error while solving linear system\n");
+    fprintf (stderr, "Error while solving linear system\n") ;
     return tdata->SLU_Info ;
   }
 
-  tdata->CurrentTime += tdata->StepTime ;
+  tdata->CurrentTime++ ;
 
   return 0 ;
 }
@@ -353,56 +345,17 @@ int emulate_step (ThermalData* tdata, StackDescription* stkd)
 
 int emulate_slot (ThermalData* tdata, StackDescription* stkd)
 {
-  int count ;
+  int result = 0 ;
 
-  if (tdata->SLU_Options.Fact != FACTORED)
+  do
   {
-    fprintf (stderr, "call fill_thermal_data before emulating\n");
-    return -1 ;
-  }
+    result = emulate_step(tdata, stkd) ;
 
-  if (tdata->CurrentTime >= tdata->CurrentSlotLimit)
-  {
-    if ( get_number_of_remaining_power_values(stkd) == 0)
+    if (result != 0)  break ;
 
-      return 1 ;
+  } while (tdata->CurrentTime % tdata->SlotLength != 0) ;
 
-    fill_sources_stack_description (stkd, tdata->Sources, tdata->Conductances) ;
-
-    tdata->CurrentSlotLimit += tdata->SlotTime ;
-  }
-
-  while ( tdata->CurrentTime < tdata->CurrentSlotLimit )
-  {
-    for(count = 0 ; count < tdata->Size ; count++)
-
-      tdata->Temperatures[count]
-
-        = tdata->Sources[count] + tdata->Capacities[count]
-                                  * tdata->Temperatures[count] ;
-
-    dgstrs
-    (
-      NOTRANS,
-      &tdata->SLUMatrix_L,
-      &tdata->SLUMatrix_U,
-      tdata->SLU_PermutationMatrixC,
-      tdata->SLU_PermutationMatrixR,
-      &tdata->SLUMatrix_B,
-      &tdata->SLU_Stat,
-      &tdata->SLU_Info
-    ) ;
-
-    if (tdata->SLU_Info < 0)
-    {
-      fprintf (stderr, "Error while solving linear system\n");
-      return tdata->SLU_Info ;
-    }
-
-    tdata->CurrentTime += tdata->StepTime ;
-  }
-
-  return 0 ;
+  return result ;
 }
 
 /******************************************************************************/

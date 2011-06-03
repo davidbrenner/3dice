@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.1 .                               *
+ * This file is part of 3D-ICE, version 1.0.2 .                               *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -207,10 +207,10 @@ Capacity_t* fill_capacities_die
 
 Source_t* fill_sources_die
 (
-  LayerIndex_t          current_layer,
+# ifdef PRINT_SOURCES
+  GridDimension_t       current_layer,
+# endif
   Die*                  die,
-  ConventionalHeatSink* conventionalheatsink,
-  Conductances*         conductances,
   Floorplan*            floorplan,
   Source_t*             sources,
   Dimensions*           dimensions
@@ -237,10 +237,8 @@ Source_t* fill_sources_die
                 (
 #                 ifdef PRINT_SOURCES
                   layer,
-#                 endif
                   current_layer + layer->LayersOffset,
-                  conventionalheatsink,
-                  conductances,
+#                 endif
                   floorplan,
                   sources,
                   dimensions
@@ -252,10 +250,8 @@ Source_t* fill_sources_die
                 (
 #                 ifdef PRINT_SOURCES
                   layer,
-#                 endif
                   current_layer + layer->LayersOffset,
-                  conventionalheatsink,
-                  conductances,
+#                 endif
                   sources,
                   dimensions
                 ) ;

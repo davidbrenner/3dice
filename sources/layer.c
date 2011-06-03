@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.1 .                               *
+ * This file is part of 3D-ICE, version 1.0.2 .                               *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -262,10 +262,8 @@ Source_t* fill_sources_active_layer
 (
 # ifdef PRINT_SOURCES
   Layer*                layer,
-# endif
   LayerIndex_t          current_layer,
-  ConventionalHeatSink* conventionalheatsink,
-  Conductances*         conductances,
+# endif
   Floorplan*            floorplan,
   Source_t*             sources,
   Dimensions*           dimensions
@@ -306,23 +304,29 @@ Source_t* fill_sources_active_layer
         column++
       )
       {
-        sources [get_cell_offset_in_layer (dimensions, row, column)]
-
-          = (
-               get_from_powers_queue(flp_el->PowerValues)
-               * get_cell_length (dimensions, column)
-               * get_cell_width (dimensions)
-            )
-            /  flp_el_surface ;
-
 #ifdef PRINT_SOURCES
         fprintf (stderr,
           "solid  cell  | l %2d r %4d c %4d [%6d] "
                        "| l %5.2f w %5.2f "  \
-                       "| %.5e [source] = (%.5e [W] * l * w) / %.5e | %s\n",
+                       "| %.5e -> ",
           current_layer, row, column,
           get_cell_offset_in_stack (dimensions, current_layer, row, column),
           get_cell_length (dimensions, column), get_cell_width (dimensions),
+          sources [get_cell_offset_in_layer (dimensions, row, column)]) ;
+#endif
+
+        sources [get_cell_offset_in_layer (dimensions, row, column)]
+
+          += (
+               get_from_powers_queue(flp_el->PowerValues)
+               * get_cell_length (dimensions, column)
+               * get_cell_width (dimensions)
+             )
+             /  flp_el_surface ;
+
+#ifdef PRINT_SOURCES
+        fprintf (stderr,
+          "%.5e [source] = (%.5e [W] * l * w) / %.5e | %s\n",
           sources [get_cell_offset_in_layer (dimensions, row, column)],
           get_from_powers_queue(flp_el->PowerValues), flp_el_surface,
           flp_el->Id) ;
@@ -333,18 +337,6 @@ Source_t* fill_sources_active_layer
     pop_from_powers_queue (flp_el->PowerValues) ;
   }
 
-  if ( current_layer == (get_number_of_layers(dimensions) - 1)
-       && conventionalheatsink != NULL )
-
-    add_sources_conventional_heat_sink
-    (
-      conventionalheatsink,
-      dimensions,
-      sources,
-      conductances,
-      current_layer
-    ) ;
-
   return sources + get_layer_area (dimensions) ;
 }
 
@@ -354,10 +346,8 @@ Source_t* fill_sources_empty_layer
 (
 # ifdef PRINT_SOURCES
   Layer*                layer,
-# endif
   LayerIndex_t          current_layer,
-  ConventionalHeatSink* conventionalheatsink,
-  Conductances*         conductances,
+# endif
   Source_t*             sources,
   Dimensions*           dimensions
 )
@@ -367,18 +357,6 @@ Source_t* fill_sources_empty_layer
     "current_layer = %d\tfill_sources_empty_layer    %s\n",
     current_layer, layer->Material->Id) ;
 #endif
-
-  if ( current_layer == (get_number_of_layers(dimensions) - 1)
-       && conventionalheatsink != NULL )
-
-    fill_sources_conventional_heat_sink
-    (
-      conventionalheatsink,
-      dimensions,
-      sources,
-      conductances,
-      current_layer
-    ) ;
 
   return sources + get_layer_area (dimensions) ;
 }

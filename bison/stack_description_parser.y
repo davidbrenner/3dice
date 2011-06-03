@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.1 .                               *
+ * This file is part of 3D-ICE, version 1.0.2 .                               *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -235,35 +235,31 @@ material
        THERMAL CONDUCTIVITY     DVALUE ';'
        VOLUMETRIC HEAT CAPACITY DVALUE ';'
     {
-      Material *material = $$ = alloc_and_init_material() ;
-
-      if (material == NULL)
-      {
-        free ($2) ;
-        stack_description_error
-        (
-          stkd, scanner, "malloc material failed"
-        ) ;
-        YYABORT ;
-      }
-
       if (find_material_in_list(stkd->MaterialsList, $2) != NULL)
       {
-        String_t message
-          = (String_t) malloc ((26 + strlen($2)) * sizeof (char)) ;
-        sprintf (message, "Material %s already declared", $2) ;
+        String_t message = (String_t) malloc ((26 + strlen($2)) * sizeof (char)) ;
+
+        sprintf (message, "material %s already declared", $2) ;
 
         free ($2) ;
-        free_material (material) ;
+
         stack_description_error (stkd, scanner, message) ;
         free (message) ;
         YYABORT ;
       }
 
-      material->Id                  = $2 ;
-      material->ThermalConductivity = $6 ;
-      material->VolHeatCapacity     = $11 ;
+      $$ = alloc_and_init_material() ;
 
+      if ($$ == NULL)
+      {
+        free ($2) ;
+        stack_description_error (stkd, scanner, "malloc material failed") ;
+        YYABORT ;
+      }
+
+      $$->Id                  = $2 ;
+      $$->ThermalConductivity = $6 ;
+      $$->VolHeatCapacity     = $11 ;
     }
   ;
 
@@ -284,7 +280,7 @@ environment_heat_sink
       {
         stack_description_error
         (
-          stkd, scanner, "malloc environment heat sink failed"
+          stkd, scanner, "malloc conventional heat sink failed"
         ) ;
         YYABORT ;
       }
@@ -398,9 +394,9 @@ die
 
       if (die == NULL)
       {
-        free ($2) ;
+        free             ($2) ;
         free_layers_list ($4) ;
-        free_layer ($5) ;
+        free_layer       ($5) ;
         free_layers_list ($6) ;
 
         stack_description_error
@@ -416,9 +412,9 @@ die
           = (String_t) malloc ((21 + strlen($2)) * sizeof (char)) ;
         sprintf (message, "Die %s already declared", $2) ;
 
-        free ($2) ;
+        free             ($2) ;
         free_layers_list ($4) ;
-        free_layer ($5) ;
+        free_layer       ($5) ;
         free_layers_list ($6) ;
         free_die (die) ;
         stack_description_error (stkd, scanner, message) ;
@@ -495,6 +491,8 @@ layer_content : DVALUE IDENTIFIER ';'
         String_t message
           = (String_t) malloc ((18 + strlen($2)) * sizeof (char)) ;
         sprintf (message, "Unknown material %s", $2) ;
+
+        stack_description_error (stkd, scanner, message) ;
 
         free ($2) ;
         free (message) ;

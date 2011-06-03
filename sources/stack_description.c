@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.1 .                               *
+ * This file is part of 3D-ICE, version 1.0.2 .                               *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -389,8 +389,6 @@ void fill_sources_stack_description
   Conductances*     conductances
 )
 {
-  StackElement* stack_element      = NULL ;
-
 #ifdef PRINT_SOURCES
   fprintf (stderr,
     "fill_sources_stack_description ( l %d r %d c %d )\n",
@@ -398,6 +396,27 @@ void fill_sources_stack_description
     get_number_of_rows    (stkd->Dimensions),
     get_number_of_columns (stkd->Dimensions));
 #endif
+
+  // reset all the source vector to 0
+
+  Quantity_t ccounter ;
+  Quantity_t ncells = get_number_of_cells (stkd->Dimensions) ;
+
+  for (ccounter = 0 ; ccounter != ncells ; ccounter++)
+
+    sources [ ccounter ] = 0.0 ;
+
+  // set the sources due to the heatsink (overwrites all cells in the last layer)
+
+  if (stkd->ConventionalHeatSink != NULL)
+
+    fill_sources_conventional_heat_sink
+    (
+      stkd->ConventionalHeatSink, stkd->Dimensions,
+      sources, conductances
+    ) ;
+
+  StackElement* stack_element      = NULL ;
 
   for
   (
@@ -412,10 +431,10 @@ void fill_sources_stack_description
 
         sources = fill_sources_die
                   (
+# ifdef PRINT_SOURCES
                     stack_element->LayersOffset,
+# endif
                     stack_element->Pointer.Die,
-                    stkd->ConventionalHeatSink,
-                    conductances,
                     stack_element->Floorplan,
                     sources,
                     stkd->Dimensions
@@ -429,10 +448,8 @@ void fill_sources_stack_description
                   (
 #                   ifdef PRINT_SOURCES
                     stack_element->Pointer.Layer,
-#                   endif
                     stack_element->LayersOffset,
-                    stkd->ConventionalHeatSink,
-                    conductances,
+#                   endif
                     sources,
                     stkd->Dimensions
                   ) ;

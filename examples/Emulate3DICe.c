@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.1 .                               *
+ * This file is part of 3D-ICE, version 1.0.2 .                               *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -62,10 +62,8 @@ main(int argc, char** argv)
   init_stack_description (&stkd) ;
 
   if (fill_stack_description (&stkd, argv[1]) != 0)
-  {
-    free_stack_description (&stkd) ;
+
     return EXIT_FAILURE ;
-  }
 
   // Init thermal data and fill it using the StackDescription
   ////////////////////////////////////////////////////////////////////////////
@@ -160,7 +158,7 @@ main(int argc, char** argv)
     printf("%7.3f  %7.3f  %7.3f\n", cell1, cell2, outlet) ;
   }
   while (emulate_step (&tdata, &stkd) != 1) ;
-  // while (emulate_slot (&tdata, &stkd) != 1) ;
+  //while (emulate_slot (&tdata, &stkd) != 1) ;
 
   fprintf (stdout, "emulation took %.3f sec\n",
            ( (double)clock() - Time ) / CLOCKS_PER_SEC );

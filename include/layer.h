@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.1 .                               *
+ * This file is part of 3D-ICE, version 1.0.2 .                               *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -127,10 +127,8 @@ extern "C"
   (
 #   ifdef PRINT_SOURCES
     Layer*                layer,
-#   endif
     LayerIndex_t          current_layer,
-    ConventionalHeatSink* conventionalheatsink,
-    Conductances*         conductances,
+#   endif
     Floorplan*            floorplan,
     Source_t*             sources,
     Dimensions*           dimensions
@@ -142,10 +140,8 @@ extern "C"
   (
 #   ifdef PRINT_SOURCES
     Layer*                layer,
-#   endif
     LayerIndex_t          current_layer,
-    ConventionalHeatSink* conventionalheatsink,
-    Conductances*         conductances,
+#   endif
     Source_t*             sources,
     Dimensions*           dimensions
   ) ;
