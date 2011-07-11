@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.2 .                               *
+ * This file is part of 3D-ICE, version 1.0.3 .                               *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -60,7 +60,7 @@ int alloc_system_matrix
     return 0 ;
 
   matrix->ColumnPointers
-    = (ColumnIndex_t*) malloc (sizeof(ColumnIndex_t) * nvalues + 1 ) ;
+    = (ColumnIndex_t*) malloc (sizeof(ColumnIndex_t) * (nvalues + 1) ) ;
 
   if (matrix->ColumnPointers == NULL)
   {

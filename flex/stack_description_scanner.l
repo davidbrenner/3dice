@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.2 .                               *
+ * This file is part of 3D-ICE, version 1.0.3 .                               *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -180,10 +180,26 @@ path                    \"{path_begin}{identifier}(\/|\.{1,2}|{identifier})*\"
                    }
 
 {path}             {
-                     int n = strlen(yytext) - 2 ;
-                     yylval->char_p = (char *) malloc (sizeof(char) * n) ;
-                     strncpy (yylval->char_p, yytext+1, n) ;
-                     return PATH;
+                     // n is the length of path, ‘\0’ character excluded
+                     // we then remove two "s
+
+                     size_t n = strlen(yytext) - 2 ;
+
+                     // but we add one place for ‘\0’ when allocating
+
+                     yylval->char_p = (char *) malloc (sizeof(char) * (n + 1)) ;
+
+                     // we copy from the character after the first "
+
+                     strncpy (yylval->char_p,
+                              yytext + (1 * sizeof (char)),
+                              n * sizeof(char)) ;
+
+                     // We finally add the ‘\0’ at the and of the string
+
+                     yylval->char_p [n] = '\0' ;
+
+                     return PATH ;
                    }
 
 <ONE_LINE_COMMENT>\n              BEGIN(INITIAL);
