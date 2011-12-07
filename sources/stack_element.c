@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
+ *          Giseong Bak                                                       *
  *          Martino Ruggiero                                                  *
  *          Thomas Brunschwiler                                               *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -34,128 +37,476 @@
  ******************************************************************************/
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "stack_element.h"
+#include "macros.h"
 
 /******************************************************************************/
 
 void
-init_stack_element (StackElement* stack_element)
+init_stack_element (StackElement *stack_element)
 {
-  stack_element->Type          = TDICE_STACK_ELEMENT_NONE ;
-  stack_element->Pointer.Layer = NULL ;
-  stack_element->Pointer.Die   = NULL ;
-  stack_element->Floorplan     = NULL ;
-  stack_element->Id            = NULL ;
-  stack_element->NLayers       = 0 ;
-  stack_element->LayersOffset  = 0 ;
-  stack_element->Next          = NULL ;
+    stack_element->Type            = TDICE_STACK_ELEMENT_NONE ;
+    stack_element->Pointer.Layer   = NULL ;
+    stack_element->Pointer.Die     = NULL ;
+    stack_element->Pointer.Channel = NULL ;
+    stack_element->Floorplan       = NULL ;
+    stack_element->Id              = NULL ;
+    stack_element->NLayers         = 0u ;
+    stack_element->Offset          = 0u ;
+    stack_element->Next            = NULL ;
+    stack_element->Prev            = NULL ;
 }
 
 /******************************************************************************/
 
-StackElement* alloc_and_init_stack_element (void)
+StackElement *alloc_and_init_stack_element (void)
 {
-  StackElement* stack_element
-    = (StackElement* ) malloc( sizeof(StackElement) ) ;
+    StackElement *stack_element = (StackElement *) malloc (sizeof(StackElement)) ;
 
-  if (stack_element != NULL) init_stack_element(stack_element) ;
+    if (stack_element != NULL)
 
-  return stack_element ;
+        init_stack_element(stack_element) ;
+
+    return stack_element ;
 }
 
 /******************************************************************************/
 
-void free_stack_element (StackElement* stack_element)
+void free_stack_element (StackElement *stack_element)
 {
-  if (stack_element->Type == TDICE_STACK_ELEMENT_DIE
-      && stack_element->Floorplan != NULL)
+    if (   stack_element->Type == TDICE_STACK_ELEMENT_DIE
+        && stack_element->Floorplan != NULL)
 
-    free_floorplan (stack_element->Floorplan) ;
+        FREE_POINTER (free_floorplan, stack_element->Floorplan) ;
 
-  else if (stack_element->Type == TDICE_STACK_ELEMENT_LAYER
-           && stack_element->Pointer.Layer != NULL)
+    else if (   stack_element->Type == TDICE_STACK_ELEMENT_LAYER
+             && stack_element->Pointer.Layer != NULL)
 
-    free_layer (stack_element->Pointer.Layer) ;
+        FREE_POINTER (free_layer, stack_element->Pointer.Layer) ;
 
-  free (stack_element->Id) ;
-  free (stack_element) ;
+    FREE_POINTER (free, stack_element->Id) ;
+    FREE_POINTER (free, stack_element) ;
 }
 
 /******************************************************************************/
 
-void free_stack_elements_list (StackElement* list)
+void free_stack_elements_list (StackElement *list)
 {
-  StackElement* next ;
-
-  for ( ; list != NULL; list = next)
-  {
-    next = list->Next ;
-    free_stack_element (list) ;
-  }
+    FREE_LIST (StackElement, list, free_stack_element) ;
 }
 
 /******************************************************************************/
 
-void print_stack_elements_list
+StackElement *find_stack_element_in_list (StackElement *list, String_t id)
+{
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT (StackElement, stk_el, list)
+    {
+        if (strcmp(stk_el->Id, id) == 0)  break ;
+    }
+    return stk_el ;
+}
+
+/******************************************************************************/
+
+void print_formatted_stack_elements_list
 (
-  FILE*         stream,
-  String_t      prefix,
-  StackElement* list
+    FILE         *stream,
+    String_t      prefix,
+    StackElement *list
 )
 {
-  fprintf (stream, "%sStack:\n", prefix) ;
+    Quantity_t max_stk_el_id_length = 0 ;
+    Quantity_t max_die_id_length = 0 ;
 
-  for ( ; list != NULL ; list = list->Next)
-  {
-    fprintf (stream,
-      "%s  Stackelement (l %-2d)\t%s\t",
-      prefix, list->LayersOffset, list->Id);
-
-    switch (list->Type)
+    FOR_EVERY_ELEMENT_IN_LIST_PREV (StackElement, stk_el, list)
     {
-      case TDICE_STACK_ELEMENT_NONE :
+        max_stk_el_id_length =
 
-        fprintf (stream, "NO TYPE\n") ;
-        break ;
+            MAX (max_stk_el_id_length, strlen (stk_el->Id)) ;
 
-      case TDICE_STACK_ELEMENT_DIE :
+        if (stk_el->Type == TDICE_STACK_ELEMENT_DIE)
 
-        fprintf (stream,
-          "die     (%s) %s \n",
-          list->Pointer.Die->Id, list->Floorplan->FileName) ;
-        break ;
+            max_die_id_length =
 
-      case TDICE_STACK_ELEMENT_LAYER :
-
-        fprintf (stream,
-          "layer   (%s) %5.2f um\n",
-          list->Pointer.Layer->Material->Id, list->Pointer.Layer->Height) ;
-        break ;
-
-      case TDICE_STACK_ELEMENT_CHANNEL :
-
-        fprintf (stream,
-          "channel\n") ;
-        break ;
-
-      default :
-
-        fprintf (stream, "Error! Unknown type %d\n", list->Type) ;
-        break ;
+                MAX (max_die_id_length, strlen (stk_el->Pointer.Die->Id)) ;
     }
-  }
+
+    fprintf (stream, "%sstack : \n", prefix) ;
+
+    FOR_EVERY_ELEMENT_IN_LIST_PREV (StackElement, stack_element, list)
+    {
+        switch (stack_element->Type)
+        {
+            case TDICE_STACK_ELEMENT_CHANNEL :
+
+                fprintf (stream,
+                    "%s   channel  %-*s ;\n",
+                    prefix, max_stk_el_id_length, stack_element->Id) ;
+                break ;
+
+            case TDICE_STACK_ELEMENT_DIE :
+
+                fprintf (stream,
+                    "%s   die      %-*s %-*s floorplan \"%s\" ;\n",
+                    prefix,
+                    max_stk_el_id_length, stack_element->Id,
+                    max_die_id_length, stack_element->Pointer.Die->Id,
+                    stack_element->Floorplan->FileName) ;
+                break ;
+
+            case TDICE_STACK_ELEMENT_LAYER :
+
+                fprintf (stream,
+                    "%s   layer    %-*s ",
+                    prefix, max_stk_el_id_length, stack_element->Id) ;
+
+                print_formatted_layer (stream, "", stack_element->Pointer.Layer) ;
+
+                break ;
+
+            case TDICE_STACK_ELEMENT_NONE :
+
+                fprintf (stderr, "Warning: found stack element type none\n") ;
+                break ;
+
+            default :
+
+                fprintf (stderr, "Undefined stack element type %d\n", stack_element->Type) ;
+        }
+    }
 }
 
 /******************************************************************************/
 
-StackElement*  find_stack_element_in_list (StackElement* list, String_t id)
+void print_detailed_stack_elements_list
+(
+    FILE         *stream,
+    String_t      prefix,
+    StackElement *list
+)
 {
-  for ( ; list != NULL ; list = list->Next)
+    String_t new_prefix =
 
-    if (strcmp(list->Id, id) == 0)  break ;
+        (String_t ) malloc (sizeof(*new_prefix) * (5 + strlen(prefix))) ;
 
- return list ;
+    if (new_prefix == NULL) return ;
+
+    sprintf (new_prefix, "%s    ", prefix) ;
+
+    FOR_EVERY_ELEMENT_IN_LIST_PREV (StackElement, stk_el, list)
+    {
+        fprintf (stream,
+            "%sstk_el                      = %p\n",
+            prefix,   stk_el);
+
+        fprintf (stream,
+            "%s  Id                        = " "%s\n",
+            prefix,   stk_el->Id);
+
+        fprintf (stream,
+            "%s  Type                      = %d\n",
+            prefix,   stk_el->Type);
+
+        if (stk_el->Type == TDICE_STACK_ELEMENT_DIE)
+        {
+            fprintf (stream,
+                "%s  Pointer.Die               = %p\n",
+                prefix,   stk_el->Pointer.Die);
+        }
+        else if (stk_el->Type == TDICE_STACK_ELEMENT_CHANNEL)
+        {
+            fprintf (stream,
+                "%s  Pointer.Channel           = %p\n",
+                prefix,   stk_el->Pointer.Channel);
+        }
+        else if (stk_el->Type == TDICE_STACK_ELEMENT_LAYER)
+        {
+            fprintf (stream,
+                "%s  Pointer.Layer             = %p\n",
+                prefix,   stk_el->Pointer.Layer);
+
+            fprintf (stream, "%s\n", prefix) ;
+
+            print_detailed_layer (stream, new_prefix, stk_el->Pointer.Layer) ;
+
+            fprintf (stream, "%s\n", prefix) ;
+        }
+
+        fprintf (stream,
+            "%s  NLayers                   = %d\n",
+            prefix,   stk_el->NLayers);
+
+        fprintf (stream,
+            "%s  Floorplan                 = %p\n",
+            prefix,   stk_el->Floorplan);
+
+        fprintf (stream,
+            "%s  Offset                    = %d\n",
+            prefix,   stk_el->Offset);
+
+        fprintf (stream,
+            "%s  Next                      = %p\n",
+            prefix,   stk_el->Next);
+
+        fprintf (stream,
+            "%s  Prev                      = %p\n",
+            prefix,   stk_el->Prev);
+
+        fprintf (stream, "%s\n", prefix) ;
+
+    } // FOR_EVERY_ELEMENT_IN_LIST
+
+    FREE_POINTER (free, new_prefix) ;
+}
+
+/******************************************************************************/
+
+CellIndex_t get_source_layer_offset (StackElement *stack_element)
+{
+    CellIndex_t layer_offset = stack_element->Offset ;
+
+    if (stack_element->Type == TDICE_STACK_ELEMENT_DIE)
+
+        layer_offset += stack_element->Pointer.Die->SourceLayerOffset ;
+
+    else if (stack_element->Type == TDICE_STACK_ELEMENT_CHANNEL)
+
+        layer_offset += stack_element->Pointer.Channel->SourceLayerOffset ;
+
+    return layer_offset ;
+}
+
+/******************************************************************************/
+
+void fill_thermal_cell_stack_element
+(
+    ThermalCell  *thermal_cells,
+    Time_t        delta_time,
+    Dimensions   *dimensions,
+    StackElement *stack_element
+)
+{
+    switch (stack_element->Type)
+    {
+        case TDICE_STACK_ELEMENT_DIE :
+
+            fill_thermal_cell_die
+
+                (thermal_cells, delta_time, dimensions,
+                 stack_element->Offset, stack_element->Pointer.Die) ;
+
+            break ;
+
+        case TDICE_STACK_ELEMENT_LAYER :
+
+            fill_thermal_cell_layer
+
+                (thermal_cells, delta_time, dimensions,
+                 stack_element->Offset, stack_element->Pointer.Layer) ;
+
+            break ;
+
+        case TDICE_STACK_ELEMENT_CHANNEL :
+
+            fill_thermal_cell_channel
+
+                (thermal_cells, delta_time, dimensions,
+                 stack_element->Offset, stack_element->Pointer.Channel) ;
+
+            break ;
+
+        case TDICE_STACK_ELEMENT_NONE :
+
+            fprintf (stderr, "Error! Found stack element with unset type\n") ;
+            break ;
+
+        default :
+
+            fprintf (stderr, "Error! Unknown stack element type %d\n", stack_element->Type) ;
+
+    } /* switch stack_element->Type */
+}
+
+/******************************************************************************/
+
+Error_t fill_sources_stack_element
+(
+    Source_t     *sources,
+    Dimensions   *dimensions,
+    StackElement *stack_element
+)
+{
+    Error_t toreturn = TDICE_SUCCESS ;
+
+    switch (stack_element->Type)
+    {
+        case TDICE_STACK_ELEMENT_DIE :
+
+            toreturn = fill_sources_die
+
+                (sources, dimensions, stack_element->Offset,
+                 stack_element->Floorplan, stack_element->Pointer.Die) ;
+
+            break ;
+
+        case TDICE_STACK_ELEMENT_LAYER :
+
+            break ;
+
+        case TDICE_STACK_ELEMENT_CHANNEL :
+
+            fill_sources_channel
+
+                (sources, dimensions, stack_element->Offset,
+                 stack_element->Pointer.Channel) ;
+
+            break ;
+
+        case TDICE_STACK_ELEMENT_NONE :
+
+            fprintf (stderr, "Error! Found stack element with unset type\n") ;
+            break ;
+
+        default :
+
+            fprintf (stderr, "Error! Unknown stack element type %d\n", stack_element->Type) ;
+
+    } /* switch stack_element->Type */
+
+    return toreturn ;
+}
+
+/******************************************************************************/
+
+SystemMatrix fill_system_matrix_stack_element
+(
+    SystemMatrix  system_matrix,
+    Dimensions   *dimensions,
+    ThermalCell  *thermal_cells,
+    StackElement *stack_element
+)
+{
+    switch (stack_element->Type)
+    {
+        case TDICE_STACK_ELEMENT_DIE :
+
+            system_matrix = fill_system_matrix_die
+
+                (stack_element->Pointer.Die, dimensions,
+                 thermal_cells, stack_element->Offset, system_matrix) ;
+
+            break ;
+
+        case TDICE_STACK_ELEMENT_LAYER :
+
+            system_matrix = fill_system_matrix_layer
+
+                (dimensions, thermal_cells, stack_element->Offset, system_matrix) ;
+
+            break ;
+
+        case TDICE_STACK_ELEMENT_CHANNEL :
+
+            system_matrix = fill_system_matrix_channel
+
+                (stack_element->Pointer.Channel, dimensions,
+                 thermal_cells, stack_element->Offset, system_matrix) ;
+
+            break ;
+
+        case TDICE_STACK_ELEMENT_NONE :
+
+            fprintf (stderr, "Error! Found stack element with unset type\n") ;
+            break ;
+
+        default :
+
+            fprintf (stderr, "Error! Unknown stack element type %d\n", stack_element->Type) ;
+
+    } /* stk_el->Type */
+
+    return system_matrix ;
+}
+
+/******************************************************************************/
+
+void print_thermal_map_stack_element
+(
+    StackElement  *stack_element,
+    Dimensions    *dimensions,
+    Temperature_t *temperatures,
+    FILE          *stream
+)
+{
+    temperatures += get_cell_offset_in_stack
+
+        (dimensions, get_source_layer_offset (stack_element), 0, 0) ;
+
+    FOR_EVERY_ROW (row_index, dimensions)
+    {
+        FOR_EVERY_COLUMN (column_index, dimensions)
+        {
+            fprintf (stream, "%7.3f  ", *temperatures++) ;
+        }
+
+        fprintf (stream, "\n") ;
+    }
+}
+
+/******************************************************************************/
+
+Quantity_t get_number_of_floorplan_elements_stack_element
+(
+    StackElement *stack_element
+)
+{
+    if (stack_element->Type == TDICE_STACK_ELEMENT_DIE)
+
+        return get_number_of_floorplan_elements_floorplan
+
+            (stack_element->Floorplan) ;
+
+    else
+
+        return 0u ;
+}
+
+/******************************************************************************/
+
+FloorplanElement *get_floorplan_element_stack_element
+(
+    StackElement *stack_element,
+    String_t      floorplan_element_id
+)
+{
+    if (stack_element->Type != TDICE_STACK_ELEMENT_DIE)
+
+        return NULL ;
+
+    return get_floorplan_element_floorplan
+
+        (stack_element->Floorplan, floorplan_element_id) ;
+}
+
+/******************************************************************************/
+
+Error_t insert_power_values_stack_element
+(
+    StackElement *stack_element,
+    PowersQueue  *pvalues
+)
+{
+    if (stack_element->Type == TDICE_STACK_ELEMENT_DIE)
+
+        return insert_power_values_floorplan
+
+            (stack_element->Floorplan, pvalues) ;
+
+    else
+
+        return TDICE_SUCCESS ;
 }
 
 /******************************************************************************/

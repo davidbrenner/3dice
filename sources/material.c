@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
+ *          Giseong Bak                                                       *
  *          Martino Ruggiero                                                  *
  *          Thomas Brunschwiler                                               *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -37,83 +40,162 @@
 #include <string.h>
 
 #include "material.h"
+#include "macros.h"
 
 /******************************************************************************/
 
-void init_material (Material* material)
+void init_material (Material *material)
 {
-  material->Id                  = NULL ;
-  material->Used                = 0 ;
-  material->VolHeatCapacity     = 0.0  ;
-  material->ThermalConductivity = 0.0  ;
-  material->Next                = NULL ;
+    material->Id                     = NULL ;
+    material->Used                   = 0u ;
+    material->VolumetricHeatCapacity = (SolidVHC_t) 0.0 ;
+    material->ThermalConductivity    = (SolidTC_t) 0.0 ;
+    material->Next                   = NULL ;
 }
 
 /******************************************************************************/
 
-Material* alloc_and_init_material (void)
+Material *alloc_and_init_material (void)
 {
-  Material* material = (Material*) malloc (sizeof (Material)) ;
+    Material *material = (Material *) malloc (sizeof(Material)) ;
 
-  if (material != NULL) init_material (material) ;
+    if (material != NULL)
 
-  return material ;
+        init_material (material) ;
+
+    return material ;
 }
 
 /******************************************************************************/
 
-void free_material (Material* material)
+void free_material (Material *material)
 {
-  free (material->Id) ;
-  free (material) ;
+    if (material->Id != NULL)
+
+        FREE_POINTER (free, material->Id) ;
+
+    FREE_POINTER (free, material) ;
 }
 
 /******************************************************************************/
 
-void free_materials_list (Material* list)
+void free_materials_list (Material *list)
 {
-  Material* next ;
-
-  for ( ; list != NULL ; list = next)
-  {
-      next = list->Next ;
-      free_material (list) ;
-  }
+    FREE_LIST (Material, list, free_material) ;
 }
 
 /******************************************************************************/
 
-void print_material (FILE* stream, String_t prefix, Material* material)
+Material *find_material_in_list (Material *list, String_t id)
 {
-  fprintf (stream,
-    "%sMaterial %s:\n",                    prefix,
-                                           material->Id) ;
-  fprintf (stream,
-    "%s  Volumetric Heat Capacity %.3e\n", prefix,
-                                           material->VolHeatCapacity) ;
-  fprintf (stream,
-    "%s  Thermal Conductivity     %.3e\n", prefix,
-                                           material->ThermalConductivity) ;
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT (Material, material, list)
+    {
+        if (strcmp(material->Id, id) == 0)
+            break ;
+    }
+    return material ;
 }
 
 /******************************************************************************/
 
-void print_materials_list (FILE* stream, String_t prefix, Material* list)
+void print_formatted_material
+(
+    FILE     *stream,
+    String_t  prefix,
+    Material *material
+)
 {
-  for ( ; list != NULL ; list = list->Next)
+    fprintf (stream,
+             "%smaterial %s :\n",
+             prefix, material->Id) ;
 
-    print_material (stream, prefix, list) ;
+    fprintf (stream,
+             "%s   thermal conductivity     %.4e  ;\n",
+             prefix, material->ThermalConductivity) ;
+
+    fprintf (stream,
+             "%s   volumetric heat capacity %.4e  ;\n",
+             prefix, material->VolumetricHeatCapacity) ;
 }
 
 /******************************************************************************/
 
-Material* find_material_in_list (Material* list, String_t id)
+void print_formatted_materials_list
+(
+    FILE     *stream,
+    String_t  prefix,
+    Material *list
+)
 {
-  for ( ; list != NULL ; list = list->Next)
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT (Material, material, list)
+    {
+        print_formatted_material (stream, prefix, material) ;
 
-    if (strcmp (list->Id, id) == 0) break ;
+        fprintf (stream, "%s\n", prefix) ;
 
-  return list ;
+        if (material->Next != NULL && material->Next->Next == NULL)
+
+            break ;
+    }
+
+    print_formatted_material (stream, prefix, material) ;
+}
+
+/******************************************************************************/
+
+void print_detailed_material
+(
+    FILE     *stream,
+    String_t  prefix,
+    Material *material
+)
+{
+    fprintf (stream,
+             "%smaterial                    = %p\n",
+             prefix, material) ;
+
+    fprintf (stream,
+             "%s  Id                        = %s\n",
+             prefix, material->Id) ;
+
+    fprintf (stream,
+             "%s  Used                      = %d\n",
+             prefix, material->Used) ;
+
+    fprintf (stream,
+             "%s  VolumetricHeatCapacity    = %.4e\n",
+             prefix, material->VolumetricHeatCapacity) ;
+
+    fprintf (stream,
+             "%s  ThermalConductivity       = %.4e\n",
+             prefix, material->ThermalConductivity) ;
+
+    fprintf (stream,
+             "%s  Next                      = %p\n",
+             prefix, material->Next) ;
+}
+
+/******************************************************************************/
+
+void print_detailed_materials_list
+(
+    FILE     *stream,
+    String_t  prefix,
+    Material *list
+)
+{
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT (Material, material, list)
+    {
+        print_detailed_material (stream, prefix, material) ;
+
+        fprintf (stream, "%s\n", prefix) ;
+
+        if (material->Next != NULL && material->Next->Next == NULL)
+
+            break ;
+    }
+
+    print_detailed_material (stream, prefix, material) ;
 }
 
 /******************************************************************************/

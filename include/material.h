@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
+ *          Giseong Bak                                                       *
  *          Martino Ruggiero                                                  *
  *          Thomas Brunschwiler                                               *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -36,10 +39,14 @@
 #ifndef _3DICE_MATERIAL_H_
 #define _3DICE_MATERIAL_H_
 
+/*! \file material.h */
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
+
+/******************************************************************************/
 
 #include <stdio.h>
 
@@ -47,96 +54,172 @@ extern "C"
 
 /******************************************************************************/
 
-  struct Material
-  {
-    /* The Id of the material */
+    /*! \struct Material
+     *
+     *  \brief Structure used to store data about the materials that compose the 2D/3D stack.
+     *
+     *  Materials are used when declaring layers composing a die or the
+     *  stack or when declaring the properties of the walls in a channel.
+     */
 
-    String_t Id ;
+    struct Material
+    {
+        /*!
+         * The identifier used to refer to the material in the stack file
+         */
 
-    /* For parsing purpose */
+        String_t Id ;
 
-    Quantity_t Used ;
+        /*!
+         * To know, after the parsing of a stack file, if a
+         * material has been declared but never used
+         */
 
-    /* The volume-specific heat capacity [ J / ( um3 * K ) ] */
+        Quantity_t Used ;
 
-    VolHeatCapacity_t VolHeatCapacity ;
+        /*!
+         * The volume-specific heat capacity of the material,
+         * expressed as \f$ \frac{J}{\mu m^3 \cdot K } \f$
+         */
 
-    /* The thermal conductivity [ W / ( um * K ) ] */
+        SolidVHC_t VolumetricHeatCapacity ;
 
-    ThermalConductivity_t ThermalConductivity ;
+        /*!
+         * The thermal conductivity of the material,
+         * expressed as \f$ \frac{W}{\mu m \cdot K } \f$
+         */
 
-    /* To collect materials in a linked list */
+        SolidTC_t ThermalConductivity ;
 
-    struct Material* Next ;
+        /*!
+         * Pointer to collect materials in a linked list
+         */
 
-  };
+        struct Material *Next ;
+    } ;
 
-  typedef struct Material Material;
+    /*! Definition of the type Material
+     */
 
-/******************************************************************************/
-
-  /* Given a valid address of a Material structure,  */
-  /* sets all its fields to a default value.         */
-
-  void init_material (Material* material) ;
-
-/******************************************************************************/
-
-  /* Allocates a Material structure and sets its     */
-  /* fields to their default values. Returns a valid */
-  /* Material address if the allocation succeed or   */
-  /* NULL if it fails.                               */
-
-  Material* alloc_and_init_material (void) ;
-
-/******************************************************************************/
-
-  /* Given the address of a Material structure,      */
-  /* frees both the Id string and the memory pointed */
-  /* by the address received.                        */
-
-  void free_material (Material* material) ;
-
-/******************************************************************************/
-
-  /* Given the address of a Material structure,      */
-  /* frees the material pointed by this address and  */
-  /* all the materials it finds following the linked */
-  /* list (see Next field).                          */
-
-  void free_materials_list (Material* list) ;
+    typedef struct Material Material ;
 
 /******************************************************************************/
 
-  /* Prints on the stream the content of the fields  */
-  /* of the material. "prefix" is a string (at least */
-  /* empty and null terminated) that is printed in   */
-  /* every line before the description.              */
 
-  void print_material (FILE* stream, String_t prefix, Material* material) ;
 
-/******************************************************************************/
+    /*! Sets all the fields of \a material to a default value (zero or \c NULL ).
+     *
+     * \param material the address of the material to initialize
+     */
 
-  /* Prints on the stream the content of the fields  */
-  /* of all the materials it finds following the     */
-  /* linked list (see Next field). "prefix" is       */
-  /* printed for every material in the list.         */
+    void init_material (Material *material) ;
 
-  void print_materials_list (FILE* stream, String_t prefix, Material* list) ;
 
-/******************************************************************************/
 
-  /* Id based search of a Material structure in a    */
-  /* material list. Returns the address of a         */
-  /* founded structure or NULL if it does not find   */
-  /* it.                                             */
+    /*! Allocates a Material in memory and sets its fields to their default
+     *  value with \c init_material
+     *
+     * \return the pointer to a new Material
+     * \return \c NULL if the memory allocation fails
+     */
 
-  Material* find_material_in_list (Material* list, String_t id) ;
+    Material *alloc_and_init_material (void) ;
+
+
+
+    /*! Frees the memory related to \a material
+     *
+     * The parametrer \a material must be a pointer previously obtained with
+     * \c alloc_and_init_material
+     *
+     * \param material the address of the material structure to free
+     */
+
+    void free_material (Material *material) ;
+
+
+
+    /*! Frees a list of materials
+     *
+     * If frees, calling \c free_material, the material pointed by the
+     * parameter \a list and all the materials it finds following the
+     * linked list throught the field Material::Next.
+     *
+     * \param list the pointer to the first elment in the list to be freed
+     */
+
+    void free_materials_list (Material *list) ;
+
+
+
+    /*! Searches for a Material in a linked list of materials.
+     *
+     * Id based search of a Material structure in a list.
+     *
+     * \param list the pointer to the list
+     * \param id   the identifier of the material to be found
+     *
+     * \return the address of a Material, if founded
+     * \return \c NULL if the search fails
+     */
+
+    Material *find_material_in_list (Material *list, String_t id) ;
+
+
+
+    /*! Prints the material as it looks in the stack file
+     *
+     * \param stream   the output stream (must be already open)
+     * \param prefix   a string to be printed as prefix at the beginning of each line
+     * \param material the material to print
+     */
+
+    void print_formatted_material
+
+         (FILE *stream, String_t prefix, Material *material) ;
+
+
+
+    /*! Prints a list of materials as they look in the stack file
+     *
+     * \param stream the output stream (must be already open)
+     * \param prefix a string to be printed as prefix at the beginning of each line
+     * \param list   the pointer to the first material in the list
+     */
+
+    void print_formatted_materials_list
+
+         (FILE *stream, String_t prefix, Material *list) ;
+
+
+
+    /*! Prints detailed information about all the fields of a material
+     *
+     * \param stream   the output stream (must be already open)
+     * \param prefix   a string to be printed as prefix at the beginning of each line
+     * \param material the material to print
+     */
+
+    void print_detailed_material
+
+         (FILE *stream, String_t prefix, Material *material) ;
+
+
+
+    /*! Prints a list of detailed information about all the fields of the materials
+     *
+     * \param stream the output stream (must be already open)
+     * \param prefix a string to be printed as prefix at the beginning of each line
+     * \param list the pointer to the first material in the list
+     */
+
+    void print_detailed_materials_list
+
+         (FILE *stream, String_t prefix, Material *list) ;
 
 /******************************************************************************/
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* _3DICE_MATERIAL_H_ */
+#endif    /* _3DICE_MATERIAL_H_ */

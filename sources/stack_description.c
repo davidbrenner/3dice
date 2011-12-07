@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
+ *          Giseong Bak                                                       *
  *          Martino Ruggiero                                                  *
  *          Thomas Brunschwiler                                               *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -33,17 +36,22 @@
  * 1015 Lausanne, Switzerland           Url  : http://esl.epfl.ch/3d-ice.html *
  ******************************************************************************/
 
+#include <stdlib.h>
+
 #include "stack_description.h"
-#include "layer.h"
+#include "macros.h"
+
 #include "../bison/stack_description_parser.h"
 #include "../flex/stack_description_scanner.h"
 
-/******************************************************************************/
+// From Bison manual:
+// The value returned by yyparse is 0 if parsing was successful (return is
+// due to end-of-input). The value is 1 if parsing failed (return is due to
+// a syntax error).
 
-extern int  stack_description_parse (StackDescription* stkd, yyscan_t scanner) ;
-static int  fill_floorplans         (StackDescription* stkd) ;
-static void align_layers_in_die     (StackDescription* stkd) ;
-static void align_stack_elements    (StackDescription* stkd) ;
+extern int stack_description_parse
+
+    (StackDescription *stkd, Analysis *analysis, yyscan_t scanner) ;
 
 /******************************************************************************/
 
@@ -51,10 +59,11 @@ void init_stack_description (StackDescription* stkd)
 {
   stkd->FileName             = NULL ;
   stkd->MaterialsList        = NULL ;
+  stkd->ConventionalHeatSink = NULL ;
   stkd->Channel              = NULL ;
   stkd->DiesList             = NULL ;
-  stkd->ConventionalHeatSink = NULL ;
-  stkd->StackElementsList    = NULL ;
+  stkd->TopStackElement      = NULL ;
+  stkd->BottomStackElement   = NULL ;
   stkd->Dimensions           = NULL ;
 }
 
@@ -62,564 +71,426 @@ void init_stack_description (StackDescription* stkd)
 
 int fill_stack_description
 (
-  StackDescription* stkd,
+  StackDescription *stkd,
+  Analysis         *analysis,
   String_t          filename
 )
 {
-  FILE*    input;
-  int      result;
-  yyscan_t scanner;
+    FILE*    input ;
+    int      result ;
+    yyscan_t scanner ;
 
-  input = fopen (filename, "r");
-  if(input == NULL)
-  {
-    perror(filename);
-    return -1;
-  }
+    input = fopen (filename, "r") ;
+    if (input == NULL)
+    {
+        fprintf (stderr, "Unable to open stack file %s\n", filename) ;
 
-  stkd->FileName = strdup (filename);
+        return EXIT_FAILURE ;
+    }
 
-  stack_description_lex_init (&scanner);
-  stack_description_set_in (input, scanner);
+    stkd->FileName = strdup (filename) ;  // FIXME memory leak
 
-  result = stack_description_parse (stkd, scanner);
+    stack_description_lex_init (&scanner) ;
+    stack_description_set_in (input, scanner) ;
 
-  stack_description_lex_destroy (scanner);
-  fclose (input);
+    result = stack_description_parse (stkd, analysis, scanner) ;
 
-  if (result == 1) return result ;
+    stack_description_lex_destroy (scanner) ;
+    fclose (input) ;
 
-  align_stack_elements (stkd) ;
-  align_layers_in_die  (stkd) ;
+    if (result == 0)
 
-  return fill_floorplans (stkd) ;
+        return TDICE_SUCCESS ;
+
+    else
+
+        return TDICE_FAILURE ;
 }
 
 /******************************************************************************/
 
 void free_stack_description (StackDescription* stkd)
 {
-  free_materials_list         (stkd->MaterialsList) ;
-  free_channel                (stkd->Channel) ;
-  free_dies_list              (stkd->DiesList) ;
-  free_conventional_heat_sink (stkd->ConventionalHeatSink) ;
-  free_stack_elements_list    (stkd->StackElementsList) ;
-  free_dimensions             (stkd->Dimensions) ;
-  free                        (stkd->FileName) ;
+    FREE_POINTER (free_materials_list,         stkd->MaterialsList) ;
+    FREE_POINTER (free_channel,                stkd->Channel) ;
+    FREE_POINTER (free_dies_list,              stkd->DiesList) ;
+    FREE_POINTER (free_conventional_heat_sink, stkd->ConventionalHeatSink) ;
+    FREE_POINTER (free_stack_elements_list,    stkd->BottomStackElement) ;
+    FREE_POINTER (free_dimensions,             stkd->Dimensions) ;
+    FREE_POINTER (free,                        stkd->FileName) ;
+
+    stkd->TopStackElement = NULL ;
 }
 
 /******************************************************************************/
 
-void print_stack_description
+void print_formatted_stack_description
 (
-  FILE*             stream,
+  FILE             *stream,
   String_t          prefix,
-  StackDescription* stkd
+  StackDescription *stkd
 )
 {
-  fprintf(stream, "%sStack read from file %s\n", prefix, stkd->FileName) ;
+    print_formatted_materials_list (stream, prefix, stkd->MaterialsList) ;
 
-  print_materials_list (stream, prefix, stkd->MaterialsList) ;
+    fprintf (stream, "%s\n", prefix) ;
 
-  if (stkd->ConventionalHeatSink != NULL)
-
-    print_conventional_heat_sink (stream, prefix, stkd->ConventionalHeatSink) ;
-
-  if (stkd->Channel != NULL)
-
-    print_channel (stream, prefix, stkd->Channel);
-
-  print_dies_list (stream, prefix, stkd->DiesList) ;
-
-  print_stack_elements_list (stream, prefix, stkd->StackElementsList) ;
-
-  print_dimensions (stream, prefix, stkd->Dimensions) ;
-}
-
-/******************************************************************************/
-
-void print_all_floorplans
-(
-  FILE*             stream,
-  String_t          prefix,
-  StackDescription* stkd
-)
-{
-  StackElement* stack_element = stkd->StackElementsList ;
-
-  for ( ; stack_element != NULL ; stack_element = stack_element->Next)
-
-    if (stack_element->Type == TDICE_STACK_ELEMENT_DIE)
-
-      print_floorplan(stream, prefix, stack_element->Floorplan) ;
-}
-
-/******************************************************************************/
-
-int fill_floorplans (StackDescription* stkd)
-{
-  StackElement* stack_element = stkd->StackElementsList ;
-
-  for ( ; stack_element != NULL ; stack_element = stack_element->Next)
-
-    if (stack_element->Type == TDICE_STACK_ELEMENT_DIE)
-
-      if (fill_floorplan (stack_element->Floorplan, stkd->Dimensions) == 1)
-
-        return 1 ;
-
-  return 0 ;
- }
-
-/******************************************************************************/
-
-static void align_layers_in_die (StackDescription* stkd)
-{
-  Layer* layer ;
-  LayerIndex_t layer_offset ;
-
-  Die* die = stkd->DiesList ;
-  for ( ; die != NULL ; die = die->Next)
-  {
-    layer_offset = 0 ;
-    layer = die->LayersList ;
-    for ( ; layer != NULL ; layer = layer->Next)
+    if (stkd->ConventionalHeatSink != NULL)
     {
-      layer->LayersOffset = layer_offset++ ;
+        print_formatted_conventional_heat_sink
+
+            (stream, prefix, stkd->ConventionalHeatSink) ;
+
+        fprintf (stream, "%s\n", prefix) ;
     }
-  }
+
+    if (stkd->Channel != NULL)
+    {
+        print_formatted_channel
+
+            (stream, prefix, stkd->Channel, stkd->Dimensions) ;
+
+        fprintf (stream, "%s\n", prefix) ;
+    }
+
+    print_formatted_dies_list (stream, prefix, stkd->DiesList) ;
+
+    fprintf (stream, "%s\n", prefix) ;
+
+    print_formatted_dimensions (stream, prefix, stkd->Dimensions) ;
+
+    fprintf (stream, "%s\n", prefix) ;
+
+    print_formatted_stack_elements_list (stream, prefix, stkd->TopStackElement) ;
+
+    fprintf (stream, "%s\n", prefix) ;
 }
 
 /******************************************************************************/
 
-static void align_stack_elements (StackDescription* stkd)
-{
-  Quantity_t layer_counter = 0 ;
-  StackElement* stack_element = stkd->StackElementsList ;
-
-  for ( ; stack_element != NULL ; stack_element = stack_element->Next)
-  {
-    stack_element->LayersOffset = layer_counter ;
-
-    layer_counter += stack_element->NLayers ;
-  }
-
- }
-
-/******************************************************************************/
-
-void fill_conductances_stack_description
+void print_detailed_stack_description
 (
-  StackDescription* stkd,
-  Conductances*     conductances
+  FILE             *stream,
+  String_t          prefix,
+  StackDescription *stkd
 )
 {
-  StackElement* stack_element ;
+    String_t new_prefix =
 
-#ifdef PRINT_CONDUCTANCES
-  fprintf
-  (
-    stderr,
-    "fill_conductances_stack_description ( l %d r %d c %d )\n",
-    get_number_of_layers  (stkd->Dimensions),
-    get_number_of_rows    (stkd->Dimensions),
-    get_number_of_columns (stkd->Dimensions)
-  ) ;
-#endif
+        (String_t) malloc (sizeof(*new_prefix) * (5 + strlen(prefix))) ;
 
-  for
-  (
-    stack_element = stkd->StackElementsList ;
-    stack_element != NULL ;
-    stack_element = stack_element->Next
-  )
+    if (new_prefix == NULL) return ;
 
-    switch (stack_element->Type)
+    sprintf (new_prefix, "%s    ", prefix) ;
+
+    fprintf (stream,
+             "%sStackDescription                = %p\n",
+             prefix, stkd) ;
+
+    fprintf (stream,
+             "%s  FileName                      = " "%s\n",
+             prefix, stkd->FileName) ;
+
+    fprintf (stream,
+             "%s  MaterialsList                 = %p\n",
+             prefix, stkd->MaterialsList) ;
+
+    if (stkd->MaterialsList != NULL)
     {
-      case TDICE_STACK_ELEMENT_DIE :
+        fprintf (stream, "%s\n", prefix) ;
 
-        conductances = fill_conductances_die
-                       (
-                         stack_element->Pointer.Die,
-                         conductances,
-                         stkd->Dimensions,
-                         stkd->ConventionalHeatSink,
-                         stack_element->LayersOffset
-                       ) ;
-        break ;
+        print_detailed_materials_list
 
-      case TDICE_STACK_ELEMENT_LAYER :
+            (stream, new_prefix, stkd->MaterialsList) ;
 
-        conductances = fill_conductances_layer
-                       (
-                         stack_element->Pointer.Layer,
-                         conductances,
-                         stkd->Dimensions,
-                         stkd->ConventionalHeatSink,
-                         stack_element->LayersOffset
-                       ) ;
-        break ;
+        fprintf (stream, "%s\n", prefix) ;
+    }
 
-      case TDICE_STACK_ELEMENT_CHANNEL :
+    fprintf (stream,
+             "%s  ConventionalHeatSink          = %p\n",
+             prefix, stkd->ConventionalHeatSink) ;
 
-        conductances = fill_conductances_channel
-                       (
-#                        ifdef PRINT_CONDUCTANCES
-                         stack_element->LayersOffset,
-#                        endif
-                         stkd->Channel,
-                         conductances, stkd->Dimensions
-                       ) ;
-        break ;
+    if (stkd->ConventionalHeatSink != NULL)
+    {
+        fprintf (stream, "%s\n", prefix) ;
 
-      case TDICE_STACK_ELEMENT_NONE :
+        print_detailed_conventional_heat_sink
 
-        fprintf (stderr, "Error! Found stack element with unset type\n") ;
-        return ;
+            (stream, new_prefix, stkd->ConventionalHeatSink) ;
 
-      default :
+        fprintf (stream, "%s\n", prefix) ;
+    }
 
-        fprintf
-        (
-          stderr,
-          "Error! Unknown stack element type %d\n",
-          stack_element->Type
-        ) ;
-        return ;
+    fprintf (stream,
+             "%s  Channel                       = %p\n",
+             prefix, stkd->Channel) ;
 
-    } /* switch stack_elementy->Type */
+    if (stkd->Channel != NULL)
+    {
+        fprintf (stream, "%s\n", prefix) ;
+
+        print_detailed_channel (stream, new_prefix, stkd->Channel) ;
+
+        fprintf (stream, "%s\n", prefix) ;
+    }
+
+    fprintf (stream,
+             "%s  DiesList                      = %p\n",
+             prefix, stkd->DiesList) ;
+
+    if (stkd->DiesList != NULL)
+    {
+        fprintf (stream, "%s\n", prefix) ;
+
+        print_detailed_dies_list
+
+            (stream, new_prefix, stkd->DiesList) ;
+
+        fprintf (stream, "%s\n", prefix) ;
+    }
+
+    fprintf (stream,
+             "%s  TopStackElement               = %p\n",
+             prefix, stkd->TopStackElement) ;
+
+    fprintf (stream,
+             "%s  BottomStackElement            = %p\n",
+             prefix, stkd->BottomStackElement) ;
+
+    if (stkd->TopStackElement != NULL)
+    {
+        fprintf (stream, "%s\n", prefix) ;
+
+        print_detailed_stack_elements_list
+
+            (stream, new_prefix, stkd->TopStackElement) ;
+
+        fprintf (stream, "%s\n", prefix) ;
+    }
+
+    fprintf (stream,
+             "%s  Dimensions                    = %p\n",
+             prefix, stkd->Dimensions) ;
+
+    if (stkd->Dimensions != NULL)
+    {
+        fprintf (stream, "%s\n", prefix) ;
+
+        print_detailed_dimensions
+
+            (stream, new_prefix, stkd->Dimensions) ;
+
+        fprintf (stream, "%s\n", prefix) ;
+    }
+
+    FREE_POINTER (free, new_prefix) ;
 }
 
 /******************************************************************************/
 
-void fill_capacities_stack_description
+void print_floorplans
 (
-  StackDescription* stkd,
-  Capacity_t*       capacities,
-  Time_t            delta_time
+    FILE             *stream,
+    String_t          prefix,
+    StackDescription *stkd
 )
 {
-  StackElement* stack_element ;
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT
 
-#ifdef PRINT_CAPACITIES
-  fprintf
-  (
-    stderr,
-    "fill_capacities_stack_description ( l %d r %d c %d )\n",
-    get_number_of_layers  (stkd->Dimensions),
-    get_number_of_rows    (stkd->Dimensions),
-    get_number_of_columns (stkd->Dimensions)
-  );
-#endif
+    (StackElement, stk_el, stkd->BottomStackElement)
 
-  for
-  (
-    stack_element = stkd->StackElementsList ;
-    stack_element != NULL ;
-    stack_element = stack_element->Next
-  )
-    switch (stack_element->Type)
-    {
-      case TDICE_STACK_ELEMENT_DIE :
+        if (stk_el->Type == TDICE_STACK_ELEMENT_DIE)
 
-        capacities = fill_capacities_die
-                     (
-#                      ifdef PRINT_CAPACITIES
-                       stack_element->LayersOffset,
-#                      endif
-                       stack_element->Pointer.Die,
-                       capacities,
-                       stkd->Dimensions,
-                       delta_time
-                     ) ;
-        break ;
-
-      case TDICE_STACK_ELEMENT_LAYER :
-
-        capacities = fill_capacities_layer
-                     (
-#                      ifdef PRINT_CAPACITIES
-                       stack_element->LayersOffset,
-#                      endif
-                       stack_element->Pointer.Layer,
-                       capacities,
-                       stkd->Dimensions,
-                       delta_time
-                     ) ;
-        break ;
-
-      case TDICE_STACK_ELEMENT_CHANNEL :
-
-        capacities = fill_capacities_channel
-                     (
-#                      ifdef PRINT_CAPACITIES
-                       stack_element->LayersOffset,
-#                      endif
-                       stkd->Channel,
-                       capacities,
-                       stkd->Dimensions,
-                       delta_time
-                     ) ;
-        break ;
-
-      case TDICE_STACK_ELEMENT_NONE :
-
-        fprintf (stderr, "Error! Found stack element with unset type\n") ;
-        return ;
-
-      default :
-
-        fprintf
-        (
-          stderr,
-          "Error! Unknown stack element type %d\n",
-          stack_element->Type
-        ) ;
-        return ;
-
-    } /* switch stack_element->Type */
+            print_detailed_floorplan (stream, prefix, stk_el->Floorplan) ;
 }
 
 /******************************************************************************/
 
-void fill_sources_stack_description
+void fill_thermal_cell_stack_description
 (
-  StackDescription* stkd,
-  Source_t*         sources,
-  Conductances*     conductances
+    ThermalCell      *thermal_cells,
+    Analysis         *analysis,
+    StackDescription *stkd
+)
+{
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT
+
+    (StackElement, stack_element, stkd->BottomStackElement)
+
+        fill_thermal_cell_stack_element
+
+            (thermal_cells, analysis->StepTime, stkd->Dimensions, stack_element) ;
+
+    if (stkd->ConventionalHeatSink)
+
+        fill_thermal_cell_conventional_heat_sink
+
+            (thermal_cells, stkd->Dimensions, stkd->ConventionalHeatSink) ;
+
+    if (analysis->AnalysisType == TDICE_ANALYSIS_TYPE_STEADY)
+
+        reset_capacities (thermal_cells, get_number_of_cells(stkd->Dimensions)) ;
+}
+
+/******************************************************************************/
+
+Error_t fill_sources_stack_description
+(
+    Source_t         *sources,
+    ThermalCell      *thermal_cells,
+    StackDescription *stkd
 )
 {
 #ifdef PRINT_SOURCES
-  fprintf (stderr,
-    "fill_sources_stack_description ( l %d r %d c %d )\n",
-    get_number_of_layers  (stkd->Dimensions),
-    get_number_of_rows    (stkd->Dimensions),
-    get_number_of_columns (stkd->Dimensions));
+    fprintf (stderr,
+        "fill_sources_stack_description ( l %d r %d c %d )\n",
+        get_number_of_layers  (stkd->Dimensions),
+        get_number_of_rows    (stkd->Dimensions),
+        get_number_of_columns (stkd->Dimensions)) ;
 #endif
 
-  // reset all the source vector to 0
+    // reset all the source vector to 0
 
-  Quantity_t ccounter ;
-  Quantity_t ncells = get_number_of_cells (stkd->Dimensions) ;
+    CellIndex_t ccounter ;
+    CellIndex_t ncells = get_number_of_cells (stkd->Dimensions) ;
 
-  for (ccounter = 0 ; ccounter != ncells ; ccounter++)
+    for (ccounter = 0 ; ccounter != ncells ; ccounter++)
 
-    sources [ ccounter ] = 0.0 ;
+        sources [ ccounter ] = (Source_t) 0.0 ;
 
-  // set the sources due to the heatsink (overwrites all cells in the last layer)
+    // set the sources due to the heatsink (overwrites all cells in the last layer)
 
-  if (stkd->ConventionalHeatSink != NULL)
+    if (stkd->ConventionalHeatSink != NULL)
 
-    fill_sources_conventional_heat_sink
-    (
-      stkd->ConventionalHeatSink, stkd->Dimensions,
-      sources, conductances
-    ) ;
+        fill_sources_conventional_heat_sink
 
-  StackElement* stack_element      = NULL ;
+            (sources, thermal_cells, stkd->Dimensions, stkd->ConventionalHeatSink) ;
 
-  for
-  (
-    stack_element = stkd->StackElementsList ;
-    stack_element != NULL ;
-    stack_element      = stack_element->Next
-  )
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT
 
-    switch (stack_element->Type)
-    {
-      case TDICE_STACK_ELEMENT_DIE :
+    (StackElement, stack_element, stkd->BottomStackElement)
 
-        sources = fill_sources_die
-                  (
-# ifdef PRINT_SOURCES
-                    stack_element->LayersOffset,
-# endif
-                    stack_element->Pointer.Die,
-                    stack_element->Floorplan,
-                    sources,
-                    stkd->Dimensions
-                  ) ;
+        if (fill_sources_stack_element (sources, stkd->Dimensions, stack_element) == TDICE_FAILURE)
 
-        break ;
+            return TDICE_FAILURE ;
 
-      case TDICE_STACK_ELEMENT_LAYER :
-
-        sources = fill_sources_empty_layer
-                  (
-#                   ifdef PRINT_SOURCES
-                    stack_element->Pointer.Layer,
-                    stack_element->LayersOffset,
-#                   endif
-                    sources,
-                    stkd->Dimensions
-                  ) ;
-        break ;
-
-      case TDICE_STACK_ELEMENT_CHANNEL :
-
-        sources = fill_sources_channel
-                  (
-#                   ifdef PRINT_SOURCES
-                    stack_element->LayersOffset,
-#                   endif
-                    stkd->Channel,
-                    sources,
-                    stkd->Dimensions
-                  ) ;
-        break ;
-
-      case TDICE_STACK_ELEMENT_NONE :
-
-        fprintf (stderr,  "Error! Found stack element with unset type\n") ;
-        return ;
-
-      default :
-
-        fprintf (stderr, "Error! Unknown stack element type %d\n",
-          stack_element->Type) ;
-        return ;
-
-    } /* switch stack_element->Type */
+    return TDICE_SUCCESS ;
 }
 
 /******************************************************************************/
 
 void fill_system_matrix_stack_description
 (
-  StackDescription*    stkd,
-  Conductances*        conductances,
-  Capacity_t*          capacities,
-  ColumnIndex_t*       column_pointers,
-  RowIndex_t*          row_indices,
-  SystemMatrixValue_t* values
+    SystemMatrix      system_matrix,
+    ThermalCell*      thermal_cells,
+    StackDescription *stkd
 )
 {
-  StackElement* stack_element ;
-  Quantity_t added, area ;
-
 #ifdef PRINT_SYSTEM_MATRIX
-  fprintf
-  (
-    stderr,
-    "fill_system_matrix_stack_description ( l %d r %d c %d )\n",
-    get_number_of_layers  (stkd->Dimensions),
-    get_number_of_rows    (stkd->Dimensions),
-    get_number_of_columns (stkd->Dimensions));
+    fprintf (stderr,
+        "fill_system_matrix_stack_description ( l %d r %d c %d )\n",
+        get_number_of_layers  (stkd->Dimensions),
+        get_number_of_rows    (stkd->Dimensions),
+        get_number_of_columns (stkd->Dimensions)) ;
 #endif
 
-  *column_pointers++ = 0 ;
+    SystemMatrix tmp_system_matrix = system_matrix ;
 
-  for
-  (
-    added            = 0,
-    area             = get_layer_area (stkd->Dimensions),
-    stack_element    = stkd->StackElementsList ;
-    stack_element   != NULL ;
-    conductances    += area * stack_element->NLayers,
-    capacities      += area * stack_element->NLayers,
-    column_pointers += area * stack_element->NLayers,
-    row_indices     += added,
-    values          += added,
-    stack_element    = stack_element->Next
-  )
+    *system_matrix.ColumnPointers++ = 0u ;
 
-    switch (stack_element->Type)
-    {
-      case TDICE_STACK_ELEMENT_DIE :
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT
 
-        added = fill_system_matrix_die
-                (
-                  stack_element->Pointer.Die, stkd->Dimensions,
-                  conductances, capacities,
-                  stkd->ConventionalHeatSink,
-                  stack_element->LayersOffset,
-                  column_pointers, row_indices, values
-                ) ;
-        break ;
+    (StackElement, stack_element, stkd->BottomStackElement)
 
-      case TDICE_STACK_ELEMENT_LAYER :
+        system_matrix = fill_system_matrix_stack_element
 
-        added = fill_system_matrix_layer
-                (
-#                 ifdef PRINT_SYSTEM_MATRIX
-                  stack_element->Pointer.Layer,
-#                 endif
-                  stkd->Dimensions, conductances, capacities,
-                  stkd->ConventionalHeatSink,
-                  stack_element->LayersOffset,
-                  column_pointers, row_indices, values
-                ) ;
-        break ;
+            (system_matrix, stkd->Dimensions, thermal_cells, stack_element) ;
 
-      case TDICE_STACK_ELEMENT_CHANNEL :
+    if (stkd->ConventionalHeatSink != NULL)
 
-        added = fill_system_matrix_channel
-                (
-#                 ifdef PRINT_SYSTEM_MATRIX
-                  stkd->Channel,
-#                 endif
-                  stkd->Dimensions, conductances, capacities,
-                  stack_element->LayersOffset,
-                  column_pointers, row_indices, values
-                ) ;
-        break ;
+        fill_system_matrix_conventional_heat_sink
 
-      case TDICE_STACK_ELEMENT_NONE :
-
-        fprintf (stderr,  "Error! Found stack element with unset type\n") ;
-        return ;
-
-      default :
-
-        fprintf (stderr, "Error! Unknown stack element type %d\n",
-          stack_element->Type) ;
-        return ;
-
-    } /* stack_element->Type */
-}
-
-/******************************************************************************/
-
-Quantity_t get_number_of_remaining_power_values (StackDescription* stkd)
-{
-  StackElement* stk_el = stkd->StackElementsList ;
-  while (stk_el != NULL && stk_el->Type != TDICE_STACK_ELEMENT_DIE)
-    stk_el = stk_el->Next;
-
-  // if stk_el == NULL then BUG !!!
-
-  return stk_el->Floorplan->ElementsList->PowerValues->Length ;
+            (tmp_system_matrix, stkd->Dimensions, thermal_cells) ;
 }
 
 /******************************************************************************/
 
 Quantity_t get_number_of_floorplan_elements
 (
-  StackDescription* stkd,
-  String_t          floorplan_id
+  StackDescription *stkd,
+  String_t          stack_element_id
 )
 {
-  StackElement* stk_el = find_stack_element_in_list
-                         (
-                           stkd->StackElementsList,
-                           floorplan_id
-                         ) ;
-  if (stk_el == NULL)
+    StackElement *stack_element = find_stack_element_in_list
 
-    return -1 ;
+        (stkd->BottomStackElement, stack_element_id) ;
 
-  if (stk_el->Type != TDICE_STACK_ELEMENT_DIE || stk_el->Floorplan == NULL)
+    if (stack_element == NULL)
 
-    return -2 ;
+        return 0 ;
 
-  return stk_el->Floorplan->NElements ;
+    return get_number_of_floorplan_elements_stack_element (stack_element) ;
 }
 
 /******************************************************************************/
 
-Quantity_t get_number_of_channel_outlets (StackDescription* stkd)
+Quantity_t get_total_number_of_floorplan_elements (StackDescription *stkd)
 {
-  return (get_number_of_columns(stkd->Dimensions) - 2) / 2 ;
+    Quantity_t tmp = 0u ;
+
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT
+
+        (StackElement, stack_element, stkd->BottomStackElement)
+
+        tmp += get_number_of_floorplan_elements_stack_element (stack_element) ;
+
+    return tmp ;
+}
+
+/******************************************************************************/
+
+FloorplanElement *get_floorplan_element
+(
+    StackDescription *stkd,
+    String_t          stack_element_id,
+    String_t          floorplan_element_id
+)
+{
+    StackElement *stack_element = find_stack_element_in_list
+
+        (stkd->BottomStackElement, stack_element_id) ;
+
+    if (stack_element == NULL)
+
+        return NULL ;
+
+    return get_floorplan_element_stack_element
+
+        (stack_element, floorplan_element_id) ;
+}
+
+/******************************************************************************/
+
+Error_t insert_power_values
+(
+    StackDescription *stkd,
+    PowersQueue      *pvalues
+)
+{
+    Error_t result ;
+
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT
+
+    (StackElement, stack_element, stkd->BottomStackElement)
+    {
+        result = insert_power_values_stack_element (stack_element, pvalues) ;
+
+        if (result == TDICE_FAILURE)
+
+            return TDICE_FAILURE ;
+    }
+
+    return TDICE_SUCCESS ;
 }
 
 /******************************************************************************/

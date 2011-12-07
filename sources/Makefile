@@ -1,5 +1,5 @@
  ##############################################################################
- # This file is part of 3D-ICE, version 1.0.3 .                               #
+ # This file is part of 3D-ICE, version 2.0 .                                 #
  #                                                                            #
  # 3D-ICE is free software: you can  redistribute it and/or  modify it  under #
  # the terms of the  GNU General  Public  License as  published by  the  Free #
@@ -20,12 +20,15 @@
  #                                                                            #
  # Authors: Arvind Sridhar                                                    #
  #          Alessandro Vincenzi                                               #
+ #          Giseong Bak                                                       #
  #          Martino Ruggiero                                                  #
  #          Thomas Brunschwiler                                               #
  #          David Atienza                                                     #
  #                                                                            #
  # For any comment, suggestion or request  about 3D-ICE, please  register and #
  # write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) #
+ # Any usage  of 3D-ICE  for research,  commercial or other  purposes must be #
+ # properly acknowledged in the resulting products or publications.           #
  #                                                                            #
  # EPFL-STI-IEL-ESL                                                           #
  # Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          #
@@ -40,10 +43,10 @@ include $(3DICE_MAIN)/makefile.def
 CINCLUDES := $(CINCLUDES) -I$(SLU_INCLUDE)
 
 CFLAGS := $(CFLAGS) -Wall -Wextra -Werror
-#CFLAGS := $(CFLAGS) -DPRINT_CONDUCTANCES
-#CFLAGS := $(CFLAGS) -DPRINT_CAPACITIES
+#CFLAGS := $(CFLAGS) -DPRINT_THERMAL_CELLS
 #CFLAGS := $(CFLAGS) -DPRINT_SYSTEM_MATRIX
 #CFLAGS := $(CFLAGS) -DPRINT_SOURCES
+#CFLAGS := $(CFLAGS) -DPRINT_SYSTEM_VECTOR
 
 all: $(3DICE_SOURCES_O)
 

@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
+ *          Giseong Bak                                                       *
  *          Martino Ruggiero                                                  *
  *          Thomas Brunschwiler                                               *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -33,452 +36,283 @@
  * 1015 Lausanne, Switzerland           Url  : http://esl.epfl.ch/3d-ice.html *
  ******************************************************************************/
 
+#include <stdlib.h>
+
 #include "floorplan.h"
+#include "macros.h"
+
 #include "../bison/floorplan_parser.h"
 #include "../flex/floorplan_scanner.h"
 
+// From Bison manual:
+// The value returned by yyparse is 0 if parsing was successful (return is
+// due to end-of-input). The value is 1 if parsing failed (return is due to
+// a syntax error).
+
 extern int floorplan_parse
+
+    (Floorplan  *floorplan, Dimensions *dimensions, yyscan_t scanner) ;
+
+/******************************************************************************/
+
+void init_floorplan (Floorplan *floorplan)
+{
+    floorplan->FileName     = NULL ;
+    floorplan->NElements    = 0u ;
+    floorplan->ElementsList = NULL ;
+}
+
+/******************************************************************************/
+
+Floorplan *alloc_and_init_floorplan (void)
+{
+    Floorplan *floorplan = (Floorplan *) malloc (sizeof(Floorplan));
+
+    if (floorplan != NULL)
+
+        init_floorplan (floorplan) ;
+
+    return floorplan ;
+}
+
+/******************************************************************************/
+
+void free_floorplan (Floorplan *floorplan)
+{
+    FREE_POINTER (free_floorplan_elements_list, floorplan->ElementsList) ;
+    FREE_POINTER (free,                         floorplan->FileName) ;
+    FREE_POINTER (free,                         floorplan) ;
+}
+
+/******************************************************************************/
+
+void print_detailed_floorplan
 (
-  Floorplan*  floorplan,
-  Dimensions* dimensions,
-  yyscan_t    scanner
-) ;
-
-/******************************************************************************/
-
-void init_floorplan (Floorplan* floorplan)
-{
-  floorplan->FileName          = NULL ;
-  floorplan->NElements         = 0 ;
-  floorplan->ElementsList      = NULL ;
-}
-
-/******************************************************************************/
-
-Floorplan* alloc_and_init_floorplan (void)
-{
-  Floorplan* floorplan = (Floorplan* ) malloc ( sizeof(Floorplan) );
-
-  if (floorplan != NULL) init_floorplan (floorplan) ;
-
-  return floorplan ;
-}
-
-/******************************************************************************/
-
-void free_floorplan (Floorplan* floorplan)
-{
-  free_floorplan_elements_list (floorplan->ElementsList) ;
-  free (floorplan->FileName) ;
-  free (floorplan) ;
-}
-
-/******************************************************************************/
-
-int fill_floorplan (Floorplan* floorplan, Dimensions* dimensions)
-{
-  FILE*    input ;
-  int      result ;
-  yyscan_t scanner ;
-
-  input = fopen (floorplan->FileName, "r") ;
-  if(input == NULL)
-  {
-    perror(floorplan->FileName) ;
-    return 1;
-  }
-
-  floorplan_lex_init  (&scanner) ;
-  floorplan_set_in    (input, scanner) ;
-  //floorplan_set_debug (1, scanner) ;
-
-  result = floorplan_parse (floorplan, dimensions, scanner) ;
-
-  floorplan_lex_destroy (scanner) ;
-  fclose (input) ;
-
-  return result ;
-}
-
-/******************************************************************************/
-
-void print_floorplan (FILE* stream, String_t prefix, Floorplan* floorplan)
-{
-  fprintf(stream,
-    "%sFloorplan read from file %s\n", prefix, floorplan->FileName) ;
-
-  print_floorplan_elements_list (stream, prefix, floorplan->ElementsList) ;
-}
-
-/******************************************************************************/
-
-Bool_t check_intersections
-(
-  Floorplan*        floorplan,
-  FloorplanElement* floorplan_element
+    FILE      *stream,
+    String_t   prefix,
+    Floorplan *floorplan
 )
 {
-  Bool_t result = FALSE_V ;
-  FloorplanElement* tmp = floorplan->ElementsList ;
+    fprintf(stream,
+        "%sFloorplan read from file %s\n", prefix, floorplan->FileName) ;
 
-  for ( ; tmp != NULL; tmp = tmp->Next)
+    print_detailed_floorplan_elements_list
 
-    if (check_intersection (tmp, floorplan_element) == TRUE_V)
+        (stream, prefix, floorplan->ElementsList) ;
+}
+
+/******************************************************************************/
+
+Error_t fill_floorplan
+(
+    Floorplan  *floorplan,
+    Dimensions *dimensions,
+    String_t    file_name
+)
+{
+    FILE *input ;
+    int result ;
+    yyscan_t scanner ;
+
+    input = fopen (file_name, "r") ;
+
+    if (input == NULL)
     {
-        fprintf (stderr,
-          "%s: found intersection between %s and %s.\n",
-          floorplan->FileName, tmp->Id, floorplan_element->Id) ;
-        result ++ ;
+        fprintf (stderr, "Unable to open floorplan file %s\n", file_name) ;
+
+        return EXIT_FAILURE ;
     }
 
-  return result ;
+    floorplan->FileName = strdup (file_name) ;  // FIXME memory leak
+
+    floorplan_lex_init  (&scanner) ;
+    floorplan_set_in    (input, scanner) ;
+    //floorplan_set_debug (1, scanner) ;
+
+    result = floorplan_parse (floorplan, dimensions, scanner) ;
+
+    floorplan_lex_destroy (scanner) ;
+    fclose (input) ;
+
+    if (result == 0)
+
+        return TDICE_SUCCESS ;
+
+    else
+
+        return TDICE_FAILURE ;
 }
 
 /******************************************************************************/
 
-Bool_t check_location
+Quantity_t get_number_of_floorplan_elements_floorplan
 (
-  Floorplan*        floorplan,
-  FloorplanElement* floorplan_element,
-  Dimensions*       dimensions
+    Floorplan *floorplan
 )
 {
-  if (   (floorplan_element->SW_X <  0)
-          || (floorplan_element->SW_X + floorplan_element->Length
-              > get_chip_length (dimensions))
-      || (floorplan_element->SW_Y <  0)
-          || (floorplan_element->SW_Y + floorplan_element->Width
-              > get_chip_width (dimensions)) )
-  {
-    fprintf (stderr,
-      "%s: floorplan element %s is outside of the floorplan.\n",
-      floorplan->FileName, floorplan_element->Id) ;
-    return TRUE_V ;
-  }
-
-  return FALSE_V ;
+    return floorplan->NElements ;
 }
 
 /******************************************************************************/
 
-Bool_t align_to_grid
+FloorplanElement *get_floorplan_element_floorplan
 (
-  Floorplan*        floorplan,
-  FloorplanElement* floorplan_element,
-  Dimensions*       dimensions
+    Floorplan *floorplan,
+    String_t   floorplan_element_id
 )
 {
-  CellDimension_t cx, cy ;
-  ColumnIndex_t column ;
-  RowIndex_t row ;
+    return find_floorplan_element_in_list
 
-  /* West side */
-
-  cx     = get_cell_length (dimensions, 0) / 2.0 ;
-  column = 0 ;
-
-  while ( cx < floorplan_element->SW_X )
-  {
-    cx += (get_cell_length (dimensions, column) / 2.0)
-          + (get_cell_length (dimensions, column + 1) / 2.0) ;
-    column++ ;
-  }
-
-  floorplan_element->SW_Column = column ;
-
-  /* East side */
-
-  while (cx < floorplan_element->SW_X + floorplan_element->Length)
-  {
-    cx += get_cell_length (dimensions, column) / 2.0
-          + (get_cell_length (dimensions, column + 1) / 2.0) ;
-
-   column ++ ;
-  }
-
-  floorplan_element->NE_Column = column - 1;
-
-  /* Effective length */
-
-  for
-  (
-    column =  floorplan_element->SW_Column ;
-    column <= floorplan_element->NE_Column ;
-    column ++
-  )
-    floorplan_element->EffectiveLength += get_cell_length (dimensions, column) ;
-
-  /* South side */
-
-  cy  = (get_cell_width (dimensions) / 2.0);
-  row = 0 ;
-
-  while ( cy < floorplan_element->SW_Y )
-  {
-    cy += get_cell_width (dimensions) ;
-    row++ ;
-  }
-
-  floorplan_element->SW_Row = row ;
-
-  /* North side */
-
-  while ( cy <= floorplan_element->SW_Y + floorplan_element->Width )
-  {
-    cy += get_cell_width (dimensions) ;
-    row++ ;
-  }
-
-  floorplan_element->NE_Row = row - 1 ;
-
-  /* Effective width */
-
-  floorplan_element->EffectiveWidth =
-    get_cell_width (dimensions)
-    * (floorplan_element->NE_Row - floorplan_element->SW_Row + 1) ;
-
-  if (floorplan_element->NE_Row - floorplan_element->SW_Row == 0
-      && floorplan_element->NE_Column - floorplan_element->SW_Column == 0)
-  {
-    fprintf (stderr,
-      "%s: no cells belong to floorplan element %s.\n",
-      floorplan->FileName, floorplan_element->Id) ;
-    return TRUE_V ;
-  }
-
-  return FALSE_V ;
+        (floorplan->ElementsList, floorplan_element_id) ;
 }
 
 /******************************************************************************/
 
-int get_max_temperature_floorplan
+Error_t fill_sources_floorplan
 (
-  Floorplan*     floorplan,
-  String_t       floorplan_element_id,
-  Dimensions*    dimensions,
-  Temperature_t* temperatures,
-  Temperature_t* max_temperature
+    Source_t   *sources,
+    Dimensions *dimensions,
+    Floorplan  *floorplan
 )
 {
-  FloorplanElement* flp_el = find_floorplan_element_in_list
-                             (
-                               floorplan->ElementsList,
-                               floorplan_element_id
-                             ) ;
-  if (flp_el == NULL)
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT (FloorplanElement, floorplan_element, floorplan->ElementsList)
 
-    return -3 ;
+        if (fill_sources_floorplan_element (sources, dimensions, floorplan_element) == TDICE_FAILURE)
 
-  get_max_temperature_floorplan_element
-  (
-    flp_el,
-    dimensions,
-    temperatures,
-    max_temperature
-  );
+            return TDICE_FAILURE ;
 
-  return 0 ;
+    return TDICE_SUCCESS ;
 }
 
 /******************************************************************************/
 
-int get_min_temperature_floorplan
+Error_t insert_power_values_floorplan
 (
-  Floorplan*     floorplan,
-  String_t       floorplan_element_id,
-  Dimensions*    dimensions,
-  Temperature_t* temperatures,
-  Temperature_t* min_temperature
+    Floorplan   *floorplan,
+    PowersQueue *pvalues
 )
 {
-  FloorplanElement* flp_el = find_floorplan_element_in_list
-                             (
-                                floorplan->ElementsList,
-                                floorplan_element_id
-                             ) ;
+    Error_t result ;
 
-  if (flp_el == NULL)
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT
 
-    return -3 ;
+    (FloorplanElement, floorplan_element, floorplan->ElementsList)
+    {
+        result = insert_power_values_floorplan_element
 
-  get_min_temperature_floorplan_element
-  (
-    flp_el,
-    dimensions,
-    temperatures,
-    min_temperature
-  );
+                    (floorplan_element, pvalues) ;
 
-  return 0 ;
+        if (result == TDICE_FAILURE)
+
+            return TDICE_FAILURE ;
+    }
+
+    return TDICE_SUCCESS ;
 }
 
 /******************************************************************************/
 
-int get_avg_temperature_floorplan
+Temperature_t *get_all_max_temperatures_floorplan
 (
-  Floorplan*     floorplan,
-  String_t       floorplan_element_id,
-  Dimensions*    dimensions,
-  Temperature_t* temperatures,
-  Temperature_t* avg_temperature
+    Floorplan     *floorplan,
+    Dimensions    *dimensions,
+    Temperature_t *temperatures,
+    Quantity_t    *n_floorplan_elements,
+    Temperature_t *max_temperatures
 )
 {
-  FloorplanElement* flp_el = find_floorplan_element_in_list
-                             (
-                               floorplan->ElementsList,
-                               floorplan_element_id
-                             ) ;
+    if (max_temperatures == NULL)
+    {
+        *n_floorplan_elements =
 
-  if (flp_el == NULL)
+            get_number_of_floorplan_elements_floorplan (floorplan) ;
 
-    return -3 ;
+        max_temperatures =
 
-  get_avg_temperature_floorplan_element
-  (
-    flp_el,
-    dimensions,
-    temperatures,
-    avg_temperature
-  );
+            (Temperature_t *) malloc (sizeof (Temperature_t) * *n_floorplan_elements) ;
+    }
 
-  return 0 ;
+    Temperature_t *tmp = max_temperatures ;
+
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT
+
+    (FloorplanElement, flp_el, floorplan->ElementsList)
+
+        *tmp++ = get_max_temperature_floorplan_element
+
+                     (flp_el, dimensions, temperatures) ;
+
+    return max_temperatures ;
 }
 
 /******************************************************************************/
 
-int get_min_avg_max_temperatures_floorplan
+Temperature_t *get_all_min_temperatures_floorplan
 (
-  Floorplan*     floorplan,
-  String_t       floorplan_element_id,
-  Dimensions*    dimensions,
-  Temperature_t* temperatures,
-  Temperature_t* min_temperature,
-  Temperature_t* avg_temperature,
-  Temperature_t* max_temperature
+    Floorplan     *floorplan,
+    Dimensions    *dimensions,
+    Temperature_t *temperatures,
+    Quantity_t    *n_floorplan_elements,
+    Temperature_t *min_temperatures
 )
 {
-  FloorplanElement* flp_el = find_floorplan_element_in_list
-                             (
-                               floorplan->ElementsList,
-                               floorplan_element_id
-                             ) ;
+    if (min_temperatures == NULL)
+    {
+        *n_floorplan_elements =
 
-  if (flp_el == NULL)
+            get_number_of_floorplan_elements_floorplan (floorplan) ;
 
-    return -3 ;
+        min_temperatures =
 
-  get_min_avg_max_temperatures_floorplan_element
-  (
-    flp_el,
-    dimensions,
-    temperatures,
-    min_temperature, avg_temperature, max_temperature
-  );
+            (Temperature_t *) malloc (sizeof (Temperature_t) * *n_floorplan_elements) ;
+    }
 
-  return 0 ;
+    Temperature_t *tmp = min_temperatures ;
+
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT
+
+    (FloorplanElement, flp_el, floorplan->ElementsList)
+
+        *tmp++ = get_min_temperature_floorplan_element
+
+                     (flp_el, dimensions, temperatures) ;
+
+    return min_temperatures ;
 }
 
 /******************************************************************************/
 
-int get_all_max_temperatures_floorplan
+Temperature_t *get_all_avg_temperatures_floorplan
 (
-  Floorplan*     floorplan,
-  Dimensions*    dimensions,
-  Temperature_t* temperatures,
-  Temperature_t* max_temperature
+    Floorplan     *floorplan,
+    Dimensions    *dimensions,
+    Temperature_t *temperatures,
+    Quantity_t    *n_floorplan_elements,
+    Temperature_t *avg_temperatures
 )
 {
-  FloorplanElement* flp_el = floorplan->ElementsList ;
+    if (avg_temperatures == NULL)
+    {
+        *n_floorplan_elements =
 
-  for ( ; flp_el != NULL ; flp_el = flp_el->Next)
+            get_number_of_floorplan_elements_floorplan (floorplan) ;
 
-    get_max_temperature_floorplan_element
-    (
-      flp_el,
-      dimensions,
-      temperatures,
-      max_temperature++
-    );
+        avg_temperatures =
 
-  return 0 ;
-}
+            (Temperature_t *) malloc (sizeof (Temperature_t) * *n_floorplan_elements) ;
+    }
 
-/******************************************************************************/
+    Temperature_t *tmp = avg_temperatures ;
 
-int get_all_min_temperatures_floorplan
-(
-  Floorplan*     floorplan,
-  Dimensions*    dimensions,
-  Temperature_t* temperatures,
-  Temperature_t* min_temperature
-)
-{
-  FloorplanElement* flp_el = floorplan->ElementsList ;
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT
 
-  for ( ; flp_el != NULL ; flp_el = flp_el->Next)
-  {
-    get_min_temperature_floorplan_element
-    (
-      flp_el,
-      dimensions,
-      temperatures,
-      min_temperature++
-    );
-  }
+    (FloorplanElement, flp_el, floorplan->ElementsList)
 
-  return 0 ;
-}
+        *tmp++ = get_avg_temperature_floorplan_element
 
-/******************************************************************************/
+                     (flp_el, dimensions, temperatures) ;
 
-int get_all_avg_temperatures_floorplan
-(
-  Floorplan*     floorplan,
-  Dimensions*    dimensions,
-  Temperature_t* temperatures,
-  Temperature_t* avg_temperature
-)
-{
-  FloorplanElement* flp_el = floorplan->ElementsList ;
-
-  for ( ; flp_el != NULL ; flp_el = flp_el->Next)
-
-    get_avg_temperature_floorplan_element
-    (
-      flp_el,
-      dimensions,
-      temperatures,
-      avg_temperature++
-    );
-
-  return 0 ;
-}
-
-/******************************************************************************/
-
-int get_all_min_avg_max_temperatures_floorplan
-(
-  Floorplan*     floorplan,
-  Dimensions*    dimensions,
-  Temperature_t* temperatures,
-  Temperature_t* min_temperature,
-  Temperature_t* avg_temperature,
-  Temperature_t* max_temperature
-)
-{
-  FloorplanElement* flp_el = floorplan->ElementsList ;
-
-  for ( ; flp_el != NULL ; flp_el = flp_el->Next)
-
-    get_min_avg_max_temperatures_floorplan_element
-    (
-      flp_el,
-      dimensions,
-      temperatures,
-      min_temperature++, avg_temperature++, max_temperature++
-    );
-
-  return 0 ;
+    return avg_temperatures ;
 }
 
 /******************************************************************************/

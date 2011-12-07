@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
+ *          Giseong Bak                                                       *
  *          Martino Ruggiero                                                  *
  *          Thomas Brunschwiler                                               *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -36,388 +39,190 @@
 #include <stdlib.h>
 
 #include "layer.h"
-#include "system_matrix.h"
+#include "macros.h"
 
 /******************************************************************************/
 
-void init_layer (Layer* layer)
+void init_layer (Layer *layer)
 {
-  layer->Height       = 0.0  ;
-  layer->LayersOffset = 0    ;
-  layer->Material     = NULL ;
-  layer->Next         = NULL ;
+    layer->Height   = 0.0 ;
+    layer->Material = NULL ;
+    layer->Next     = NULL ;
+    layer->Prev     = NULL ;
 }
 
 /******************************************************************************/
 
-Layer* alloc_and_init_layer (void)
+Layer *alloc_and_init_layer (void)
 {
-  Layer* layer = (Layer*) malloc (sizeof (Layer)) ;
+    Layer *layer = (Layer *) malloc (sizeof(Layer));
 
-  if (layer != NULL) init_layer (layer) ;
+    if (layer != NULL)
 
-  return layer ;
+        init_layer (layer) ;
+
+    return layer ;
 }
 
 /******************************************************************************/
 
-void free_layer (Layer* layer)
+void free_layer (Layer *layer)
 {
-  free (layer) ;
+    FREE_POINTER (free, layer) ;
 }
 
 /******************************************************************************/
 
-void free_layers_list (Layer* list)
+void free_layers_list (Layer *list)
 {
-  Layer* next ;
-
-  for ( ; list != NULL ; list = next)
-  {
-      next = list->Next ;
-      free_layer (list) ;
-  }
+    FREE_LIST (Layer, list, free_layer) ;
 }
 
 /******************************************************************************/
 
-void print_layer (FILE* stream, String_t prefix, Layer* layer)
+void print_formatted_layer (FILE *stream, String_t prefix, Layer *layer)
 {
-  fprintf (stream,
-    "%sLayer #%d height %5.2f um, material %s\n",
-    prefix, layer->LayersOffset, layer->Height, layer->Material->Id) ;
+    fprintf (stream,
+        "%s %7.1f  %s ;\n",
+        prefix, layer->Height, layer->Material->Id) ;
 }
 
 /******************************************************************************/
 
-void print_layers_list (FILE* stream, String_t prefix, Layer* list)
+void print_detailed_layer (FILE *stream, String_t prefix, Layer *layer)
 {
-  for ( ; list != NULL ; list = list->Next)
+    fprintf (stream,
+        "%slayer                   = %p\n",
+        prefix, layer) ;
 
-    print_layer (stream, prefix, list) ;
+    fprintf (stream,
+        "%s  Height                = %.1f\n",
+        prefix, layer->Height) ;
+
+    fprintf (stream,
+        "%s  Material              = %p\n",
+        prefix, layer->Material) ;
+
+    fprintf (stream,
+        "%s  Next                  = %p\n",
+        prefix, layer->Next) ;
+
+    fprintf (stream,
+        "%s  Prev                  = %p\n",
+        prefix, layer->Prev) ;
 }
 
 /******************************************************************************/
 
-Conductances*   fill_conductances_layer
+void print_formatted_layers_list (FILE *stream, String_t prefix, Layer *list)
+{
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT (Layer, layer, list)
+
+        print_formatted_layer (stream, prefix, layer) ;
+}
+
+/******************************************************************************/
+
+void print_detailed_layers_list (FILE *stream, String_t prefix, Layer *list)
+{
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT (Layer, layer, list)
+    {
+        print_detailed_layer (stream, prefix, layer) ;
+
+        fprintf (stream, "%s\n", prefix) ;
+
+        if (layer->Next != NULL && layer->Next->Next == NULL)
+
+            break ;
+    }
+
+    print_detailed_layer (stream, prefix, layer) ;
+}
+
+/******************************************************************************/
+
+void fill_thermal_cell_layer
 (
-  Layer*                layer,
-  Conductances*         conductances,
-  Dimensions*           dimensions,
-  ConventionalHeatSink* conventionalheatsink,
-  LayerIndex_t          current_layer
+    ThermalCell *thermal_cells,
+    Time_t       delta_time,
+    Dimensions  *dimensions,
+    CellIndex_t  layer_index,
+    Layer       *layer
 )
 {
-  RowIndex_t    row ;
-  ColumnIndex_t column ;
+    void (*fill_cell)
 
-  void (*fill_conductances)
-  (
-#   ifdef PRINT_CONDUCTANCES
-    Dimensions*            dimensions,
-    LayerIndex_t           current_layer,
-    RowIndex_t             current_row,
-    ColumnIndex_t          current_column,
-#   endif
-    Conductances*          conductances,
-    CellDimension_t        cell_length,
-    CellDimension_t        cell_width,
-    CellDimension_t        cell_height,
-    ThermalConductivity_t  thermal_conductivity,
-    AmbientHTC_t           ambient_htc
-  );
+        (ThermalCell *, Time_t,
+         CellDimension_t, CellDimension_t, CellDimension_t,
+         SolidTC_t, SolidVHC_t) ;
 
-  if (current_layer == 0)
+    if (IS_FIRST_LAYER (layer_index))
 
-    fill_conductances = &fill_conductances_bottom_solid_cell;
+        fill_cell = fill_solid_cell_bottom ;
 
-  else if (current_layer == get_number_of_layers(dimensions) - 1)
+    else if (IS_LAST_LAYER (layer_index, dimensions))
 
-    if (conventionalheatsink == NULL)
-
-      fill_conductances = &fill_conductances_top_solid_cell;
+        fill_cell = fill_solid_cell_top ;
 
     else
 
-      fill_conductances = &fill_conductances_top_solid_cell_ehtc;
+        fill_cell = fill_solid_cell_central ;
 
-  else
+    CellIndex_t cell_index
 
-    fill_conductances = &fill_conductances_central_solid_cell;
+        = get_cell_offset_in_stack (dimensions, layer_index, 0, 0) ;
 
+    thermal_cells += cell_index ;
 
-#ifdef PRINT_CONDUCTANCES
-  fprintf (stderr, "fill_conductances_layer %s\n", layer->Material->Id) ;
-#endif
-
-  for
-  (
-    row = 0 ;
-    row < get_number_of_rows (dimensions) ;
-    row++
-  )
-
-    for
-    (
-      column = 0 ;
-      column < get_number_of_columns (dimensions) ;
-      column++, conductances++
-    )
-
-      fill_conductances
-      (
-#ifdef PRINT_CONDUCTANCES
-        dimensions,
-        current_layer, row, column,
-#endif
-        conductances,
-        get_cell_length (dimensions, column),
-        get_cell_width  (dimensions),
-        layer->Height,
-        layer->Material->ThermalConductivity,
-        conventionalheatsink == NULL ? (AmbientHTC_t) 0
-                                     : conventionalheatsink->AmbientHTC
-      ) ;
-
-  return conductances ;
-}
-
-/******************************************************************************/
-
-static Capacity_t capacity
-(
-  CellDimension_t   length,
-  CellDimension_t   width,
-  CellDimension_t   height,
-  VolHeatCapacity_t vhc,
-  Time_t            time
-)
-{
-  return ((length * width * height) * vhc) / time ;
-}
-
-Capacity_t* fill_capacities_layer
-(
-#ifdef PRINT_CAPACITIES
-  LayerIndex_t current_layer,
-#endif
-  Layer*       layer,
-  Capacity_t*  capacities,
-  Dimensions*  dimensions,
-  Time_t       delta_time
-)
-{
-  RowIndex_t    row ;
-  ColumnIndex_t column ;
-
-#ifdef PRINT_CAPACITIES
-  fprintf (stderr,
-    "current_layer = %d\tfill_capacities_layer %s\n",
-    current_layer, layer->Material->Id) ;
-#endif
-
-  for
-  (
-    row = 0 ;
-    row < get_number_of_rows (dimensions) ;
-    row++
-  )
-
-    for
-    (
-      column = 0 ;
-      column < get_number_of_columns (dimensions) ;
-      column++,
-      capacities++
-    )
+    FOR_EVERY_ROW (row_index, dimensions)
     {
-      *capacities = capacity
-                    (
-                      get_cell_length (dimensions, column),
-                      get_cell_width (dimensions),
-                      layer->Height,
-                      layer->Material->VolHeatCapacity,
-                      delta_time
-                    ) ;
-
-#ifdef PRINT_CAPACITIES
-      fprintf (stderr,
-          "solid cell   |  l %2d r %4d c %4d [%6d] |  l %5.2f w %5.2f h %5.2f " \
-                      " |  %.5e [capacity] = (l x w x h x %.5e [        vhc]) / %.5e [delta] |\n",
-        current_layer, row, column,
-        get_cell_offset_in_stack (dimensions, current_layer, row, column),
-        get_cell_length(dimensions, column),
-        get_cell_width (dimensions),
-        layer->Height, *capacities, layer->Material->VolHeatCapacity, delta_time
-      ) ;
+        FOR_EVERY_COLUMN (column_index, dimensions)
+        {
+#ifdef PRINT_THERMAL_CELLS
+            fprintf (stderr,
+                "  l %2d r %4d c %4d [%7d] ",
+                layer_index, row_index, column_index, cell_index++) ;
 #endif
+
+            fill_cell (thermal_cells, delta_time,
+                       get_cell_length(dimensions, column_index),
+                       get_cell_width(dimensions, row_index),
+                       layer->Height,
+                       layer->Material->ThermalConductivity,
+                       layer->Material->VolumetricHeatCapacity) ;
+
+            thermal_cells ++ ;
+        }
     }
-
-  return capacities ;
 }
 
 /******************************************************************************/
 
-Source_t* fill_sources_active_layer
+SystemMatrix fill_system_matrix_layer
 (
-# ifdef PRINT_SOURCES
-  Layer*                layer,
-  LayerIndex_t          current_layer,
-# endif
-  Floorplan*            floorplan,
-  Source_t*             sources,
-  Dimensions*           dimensions
+    Dimensions   *dimensions,
+    ThermalCell  *thermal_cells,
+    CellIndex_t   layer_index,
+    SystemMatrix  system_matrix
 )
 {
-  RowIndex_t        row ;
-  ColumnIndex_t     column ;
-  CellDimension_t   flp_el_surface ;
-  FloorplanElement* flp_el ;
-
-#ifdef PRINT_SOURCES
-  fprintf (stderr,
-    "current_layer = %d\tfill_sources_source_layer   %s\n",
-    current_layer, layer->Material->Id) ;
-#endif
-
-  for
-  (
-    flp_el  = floorplan->ElementsList ;
-    flp_el != NULL ;
-    flp_el  = flp_el->Next
-  )
-  {
-    flp_el_surface
-      = (CellDimension_t) (flp_el->EffectiveLength * flp_el->EffectiveWidth) ;
-
-    for
-    (
-      row = flp_el->SW_Row ;
-      row <= flp_el->NE_Row ;
-      row++
-    )
-
-      for
-      (
-        column =  flp_el->SW_Column ;
-        column <= flp_el->NE_Column ;
-        column++
-      )
-      {
-#ifdef PRINT_SOURCES
-        fprintf (stderr,
-          "solid  cell  | l %2d r %4d c %4d [%6d] "
-                       "| l %5.2f w %5.2f "  \
-                       "| %.5e -> ",
-          current_layer, row, column,
-          get_cell_offset_in_stack (dimensions, current_layer, row, column),
-          get_cell_length (dimensions, column), get_cell_width (dimensions),
-          sources [get_cell_offset_in_layer (dimensions, row, column)]) ;
-#endif
-
-        sources [get_cell_offset_in_layer (dimensions, row, column)]
-
-          += (
-               get_from_powers_queue(flp_el->PowerValues)
-               * get_cell_length (dimensions, column)
-               * get_cell_width (dimensions)
-             )
-             /  flp_el_surface ;
-
-#ifdef PRINT_SOURCES
-        fprintf (stderr,
-          "%.5e [source] = (%.5e [W] * l * w) / %.5e | %s\n",
-          sources [get_cell_offset_in_layer (dimensions, row, column)],
-          get_from_powers_queue(flp_el->PowerValues), flp_el_surface,
-          flp_el->Id) ;
-#endif
-
-      }
-
-    pop_from_powers_queue (flp_el->PowerValues) ;
-  }
-
-  return sources + get_layer_area (dimensions) ;
-}
-
-/******************************************************************************/
-
-Source_t* fill_sources_empty_layer
-(
-# ifdef PRINT_SOURCES
-  Layer*                layer,
-  LayerIndex_t          current_layer,
-# endif
-  Source_t*             sources,
-  Dimensions*           dimensions
-)
-{
-#ifdef PRINT_SOURCES
-  fprintf (stderr,
-    "current_layer = %d\tfill_sources_empty_layer    %s\n",
-    current_layer, layer->Material->Id) ;
-#endif
-
-  return sources + get_layer_area (dimensions) ;
-}
-
-/******************************************************************************/
-
-Quantity_t fill_system_matrix_layer
-(
-# ifdef PRINT_SYSTEM_MATRIX
-  Layer*                layer,
-# endif
-  Dimensions*           dimensions,
-  Conductances*         conductances,
-  Capacity_t*           capacities,
-  ConventionalHeatSink* conventionalheatsink,
-  LayerIndex_t          current_layer,
-  ColumnIndex_t*        column_pointers,
-  RowIndex_t*           row_indices,
-  SystemMatrixValue_t*  values
-)
-{
-  RowIndex_t row ;
-  ColumnIndex_t column ;
-  Quantity_t added, tot_added ;
-
 #ifdef PRINT_SYSTEM_MATRIX
-  fprintf (stderr,
-    "(l %2d) fill_system_matrix_layer %s\n",
-    current_layer, layer->Material->Id) ;
+    fprintf (stderr, "(l %2d) fill_system_matrix_layer \n", layer_index) ;
 #endif
 
-  for
-  (
-    tot_added = 0,
-    row = 0 ;
-    row < get_number_of_rows (dimensions) ;
-    row++
-  )
+    FOR_EVERY_ROW (row_index, dimensions)
+    {
+        FOR_EVERY_COLUMN (column_index, dimensions)
+        {
+            system_matrix = add_solid_column
 
-    for
-    (
-      column = 0 ;
-      column < get_number_of_columns (dimensions) ;
-      conductances    ++ ,
-      capacities      ++ ,
-      column_pointers ++ ,
-      row_indices     += added ,
-      values          += added ,
-      tot_added       += added ,
-      column          ++
-    )
+                (dimensions, thermal_cells,
+                 layer_index, row_index, column_index, system_matrix) ;
 
-      added = add_solid_column
-              (
-                dimensions, conductances, capacities,
-                conventionalheatsink,
-                current_layer, row, column,
-                column_pointers, row_indices, values
-              ) ;
+        } // FOR_EVERY_COLUMN
+    } // FOR_EVERY_ROW
 
-  return tot_added ;
+    return system_matrix ;
 }
 
 /******************************************************************************/

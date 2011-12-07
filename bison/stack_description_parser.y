@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
- *          Martino Ruggiero                                                  *
+ *          Giseong Bak                                                       *
  *          Thomas Brunschwiler                                               *
+ *          Martino Ruggiero                                                  *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -33,125 +36,172 @@
  * 1015 Lausanne, Switzerland           Url  : http://esl.epfl.ch/3d-ice.html *
  ******************************************************************************/
 
-%{
-#include "math.h"
+%code requires
+{
+    #include "types.h"
 
-#include "material.h"
-#include "die.h"
-#include "layer.h"
-#include "stack_element.h"
-#include "stack_description.h"
-#include "types.h"
-%}
+    #include "material.h"
+    #include "die.h"
+    #include "stack_element.h"
+    #include "inspection_point.h"
+}
 
-/* The YYSTYPE union used to collect the types of tokens and rules */
+// The YYSTYPE union used to collect the types of tokens and rules
 
 %union
 {
-   double       double_v ;
-   String_t     char_p ;
-
-   Material*      material_p ;
-   Die*           die_p ;
-   Layer*         layer_p ;
-   StackElement*  stack_element_p ;
-   CoolantHTCs_t  coolanthtcs_v ;
+    double                double_v ;
+    String_t              string ;
+    Material             *material_p ;
+    Coolant_t             coolant_v ;
+    ChannelModel_t        channel_model_v ;
+    Die                  *die_p ;
+    Layer                *layer_p ;
+    StackElement         *stack_element_p ;
+    InspectionPoint      *inspection_point_p ;
+    OutputInstant_t       output_instant_v ;
+    OutputQuantity_t      output_quantity_v ;
 }
 
-%type <double_v> first_wall_length
-%type <double_v> last_wall_length
+%code
+{
+    #include "analysis.h"
+    #include "channel.h"
+    #include "conventional_heat_sink.h"
+    #include "dimensions.h"
+    #include "floorplan_element.h"
+    #include "floorplan.h"
+    #include "layer.h"
+    #include "macros.h"
+    #include "stack_description.h"
 
-%type <coolanthtcs_v> coolant_heat_transfer_coefficients
+    #include "../flex/stack_description_scanner.h"
 
-%type <material_p> material
-%type <material_p> materials_list
+    void stack_description_error
 
-%type <die_p> die
-%type <die_p> dies_list
+        (StackDescription *stack, Analysis *analysis,
+         yyscan_t scanner, String_t message) ;
 
-%type <layer_p> layer
-%type <layer_p> layer_content ;
-%type <layer_p> layers
-%type <layer_p> layers_list
-%type <layer_p> source_layer
+    static char error_message [100] ;
 
-%type <stack_element_p> stack_element
-%type <stack_element_p> stack_elements
+    static CellDimension_t first_wall_length ;
+    static CellDimension_t last_wall_length ;
+    static CellDimension_t wall_length ;
+    static CellDimension_t channel_length ;
+    static Quantity_t      num_channels ;
+    static Quantity_t      num_dies ;
+}
 
+%type <double_v>           first_wall_length
+%type <double_v>           last_wall_length
+%type <channel_model_v>    distribution
+%type <coolant_v>          coolant_heat_transfer_coefficients_4rm
+%type <coolant_v>          coolant_heat_transfer_coefficients_2rm
+%type <material_p>         material
+%type <material_p>         materials_list
+%type <die_p>              die
+%type <die_p>              dies_list
+%type <layer_p>            layer
+%type <layer_p>            layers_list
+%type <layer_p>            source_layer
+%type <layer_p>            layer_content
+%type <stack_element_p>    stack_element
+%type <stack_element_p>    stack_elements
+%type <inspection_point_p> inspection_point
+%type <output_instant_v>   when
+%type <output_quantity_v>  maxminavg
+
+%token _2RM                  "keyword 2rm"
+%token _4RM                  "keyword 4rm"
 %token AMBIENT               "keyword ambient"
+%token AVERAGE               "keyword average"
+%token BOTTOM                "keyword bottom"
+%token CAPACITY              "keyword capacity"
+%token CELL                  "keyword cell"
 %token CHANNEL               "keyword channel"
 %token CHIP                  "keyword chip"
-%token CELL                  "keyword cell"
+%token COEFFICIENT           "keyword coefficient"
+%token CONDUCTIVITY          "keyword conductivity"
+%token CONVENTIONAL          "keyword conventional"
+%token COOLANT               "keyword coolant"
+%token DARCY                 "keyword darcy"
+%token DIAMETER              "keyword diameter"
 %token DIE                   "keyword die"
 %token DIMENSIONS            "keyword dimensions"
+%token DISTRIBUTION          "keyword distribution"
+%token FINAL                 "keyword final"
 %token FIRST                 "keyword first"
-%token FLOW                  "keyword flow"
-%token RATE                  "keyword rate"
-%token INCOMING              "keyword incoming"
-%token TEMPERATURE           "keyword temperature"
-%token LAYER                 "keyword layer"
-%token LAST                  "keyword last"
-%token MATERIAL              "keyword material"
-%token ON                    "keyword on"
-%token SOURCE                "keyword source"
-%token SPECIFIC              "keyword specific"
-%token HEAT                  "keyword heat"
-%token THERMAL               "keyword thermal"
-%token CONDUCTIVITY          "keyword conductivity"
-%token HEIGHT                "keyword height"
-%token WALL                  "keyword wall"
-%token COOLANT               "keyword coolant"
-%token TRANSFER              "keyword transfer"
-%token COEFFICIENT           "keyword coefficient"
-%token WIDTH                 "keyword width"
-%token LENGTH                "keyword length"
 %token FLOORPLAN             "keyword floorplan"
-%token STACK                 "keyword stack"
-%token VOLUMETRIC            "keywork volumetric"
-%token CAPACITY              "keyword capacity"
-%token CONVENTIONAL          "keyword conventional"
-%token SINK                  "keywork sink"
+%token FLOW                  "keyword flow"
+%token HEAT                  "keyword heat"
+%token HEIGHT                "keyword height"
+%token INCOMING              "keyword incoming"
+%token INITIAL_              "keyword initial"
+%token INLINE                "keyword inline"
+%token LAST                  "keyword last"
+%token LAYER                 "keyword layer"
+%token LENGTH                "keyword length"
+%token MATERIAL              "keyword material"
+%token MAXIMUM               "keyword maximum"
+%token MICROCHANNEL          "keyword microchannel"
+%token MINIMUM               "keyword minimum"
+%token OUTPUT                "keyword output"
+%token PIN                   "keyword pin"
+%token PINFIN                "keyword pinfin"
+%token PITCH                 "keyword pitch"
+%token RATE                  "keyword rate"
 %token SIDE                  "keyword side"
+%token SINK                  "keywork sink"
+%token SLOT                  "keyword slot"
+%token SOLVER                "keyword solver"
+%token SOURCE                "keyword source"
+%token STACK                 "keyword stack"
+%token STAGGERED             "keyword staggered"
+%token STATE                 "keyword state"
+%token STEADY                "keyword steady"
+%token STEP                  "keyword step"
+%token TCELL                 "keyword T"
+%token TEMPERATURE           "keyword temperature"
+%token TFLP                  "keyword Tflp"
+%token TFLPEL                "keyword Tflpel"
+%token THERMAL               "keyword thermal"
+%token TMAP                  "keyword Tmap"
 %token TOP                   "keyword top"
-%token BOTTOM                "keyword bottom"
+%token TRANSFER              "keyword transfer"
+%token TRANSIENT             "keyword transient"
+%token VELOCITY              "keyword velocity"
+%token VOLUMETRIC            "keywork volumetric"
+%token WALL                  "keyword wall"
+%token WIDTH                 "keyword width"
 
-%token <double_v> DVALUE     "float value"
-%token <char_p>   IDENTIFIER "identifier"
-%token <char_p>   PATH       "path to file"
+%token <double_v> DVALUE     "double value"
+%token <string>   IDENTIFIER "identifier"
+%token <string>   PATH       "path to file"
 
-%destructor { free($$) ;                      } <char_p>
-%destructor { free_layers_list ($$) ;         } <layers>
-%destructor { free_dies_list ($$) ;           } <dies>
-%destructor { free_stack_elements_list ($$) ; } <stack_elements>
-
-%{
-#include "../flex/stack_description_scanner.h"
-
-void stack_description_error
-(
-  StackDescription* stack,
-  yyscan_t          scanner,
-  String_t          message
-) ;
-
-static enum StackElement_t last_stack_element = TDICE_STACK_ELEMENT_NONE ;
-static int found_die     = 0 ;
-static int found_channel = 0 ;
-
-static int tmp_first_wall_length = 0 ;
-static int tmp_last_wall_length = 0 ;
-static int tmp_wall_length = 0 ;
-static int tmp_channel_length = 0 ;
-%}
+%destructor { FREE_POINTER (free,                     $$) ; } <string>
+%destructor { FREE_POINTER (free_layers_list,         $$) ; } <layer_p>
 
 %name-prefix "stack_description_"
 %output      "stack_description_parser.c"
 
 %pure-parser
 %error-verbose
-%parse-param { StackDescription *stkd }
-%parse-param { yyscan_t scanner }
+
+%parse-param { StackDescription *stkd     }
+%parse-param { Analysis         *analysis }
+%parse-param { yyscan_t          scanner }
+
 %lex-param   { yyscan_t scanner }
+
+%initial-action
+{
+    first_wall_length = 0.0 ;
+    last_wall_length  = 0.0 ;
+    wall_length       = 0.0 ;
+    channel_length    = 0.0 ;
+    num_channels      = 0u ;
+    num_dies          = 0u ;
+} ;
 
 %start stack_description_file
 
@@ -164,59 +214,14 @@ static int tmp_channel_length = 0 ;
 stack_description_file
 
   : materials_list
-    environment_heat_sink
-    channel
-    {
-      if (stkd->Channel == NULL && stkd->ConventionalHeatSink == NULL)
-
-        fprintf(stderr,
-                "Warning: both ambient heat sink and channels are absent.\n") ;
-
-    }
+    conventional_heat_sink
+    microchannel
     dies_list
-    stack
     dimensions
-    {
-      //
-      // Checks if all the materials are used
-      //
-
-      Material* tmp ;
-      for (tmp = stkd->MaterialsList ; tmp != NULL ; tmp = tmp->Next)
-        if (tmp->Used == 0)
-          fprintf(stderr,
-                  "Warning: material %s declared but not used\n", tmp->Id) ;
-
-      //
-      // Counts the number of layers
-      //
-
-      StackElement *stk_el = stkd->StackElementsList ;
-      for ( ; stk_el != NULL ; stk_el = stk_el->Next)
-        stkd->Dimensions->Grid.NLayers += stk_el->NLayers ;
-
-      //
-      // Evaluate the number of cells and nonzeroe elements
-      //
-
-      stkd->Dimensions->Grid.NCells
-        = get_number_of_layers(stkd->Dimensions)
-          * get_number_of_rows(stkd->Dimensions)
-          * get_number_of_columns(stkd->Dimensions) ;
-
-      stkd->Dimensions->Grid.NNz
-        =   get_number_of_layers(stkd->Dimensions)
-            * (
-                  get_number_of_rows(stkd->Dimensions)
-                  * (3 * get_number_of_columns(stkd->Dimensions) - 2)
-                + 2 * get_number_of_columns(stkd->Dimensions)
-                  * (get_number_of_rows(stkd->Dimensions) - 1)
-              )
-          + (get_number_of_layers(stkd->Dimensions) - 1 ) * 2
-            * get_number_of_rows(stkd->Dimensions)
-            * get_number_of_columns(stkd->Dimensions) ;
-
-    }
+    stack
+    solver
+    initial_temperature
+    inspection_points
   ;
 
 /******************************************************************************/
@@ -225,41 +230,52 @@ stack_description_file
 
 materials_list
 
-  : material                { stkd->MaterialsList = $1 ; $$ = $1 ; }
-  | materials_list material { $1->Next = $2            ; $$ = $2 ; }
+  : material                // $1 : pointer to the first material found
+    {
+        stkd->MaterialsList = $1 ;
+
+        $$ = $1 ;           // $1 will be the new last element in the list
+    }
+  | materials_list material // $1 : pointer to the last material in the list
+                            // $2 : pointer to the material to add in the list
+    {
+
+        if (find_material_in_list (stkd->MaterialsList, $2->Id) != NULL)
+        {
+            sprintf (error_message, "Material %s already declared", $2->Id) ;
+
+            FREE_POINTER (free_material, $2) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            YYABORT ;
+        }
+
+        $1->Next = $2 ;     // insert $2 at the end of the list
+        $$ = $2 ;           // $2 will be the new last element in the list
+    }
   ;
 
 material
 
-  : MATERIAL IDENTIFIER ':'
-       THERMAL CONDUCTIVITY     DVALUE ';'
-       VOLUMETRIC HEAT CAPACITY DVALUE ';'
+  : MATERIAL IDENTIFIER ':'                     // $2
+        THERMAL CONDUCTIVITY     DVALUE ';'     // $6
+        VOLUMETRIC HEAT CAPACITY DVALUE ';'     // $11
     {
-      if (find_material_in_list(stkd->MaterialsList, $2) != NULL)
-      {
-        String_t message = (String_t) malloc ((26 + strlen($2)) * sizeof (char)) ;
+        Material *material = $$ = alloc_and_init_material () ;
 
-        sprintf (message, "material %s already declared", $2) ;
+        if (material == NULL)
+        {
+            FREE_POINTER (free, $2) ;
 
-        free ($2) ;
+            stack_description_error (stkd, analysis, scanner, "Malloc material failed") ;
 
-        stack_description_error (stkd, scanner, message) ;
-        free (message) ;
-        YYABORT ;
-      }
+            YYABORT ;
+        }
 
-      $$ = alloc_and_init_material() ;
-
-      if ($$ == NULL)
-      {
-        free ($2) ;
-        stack_description_error (stkd, scanner, "malloc material failed") ;
-        YYABORT ;
-      }
-
-      $$->Id                  = $2 ;
-      $$->ThermalConductivity = $6 ;
-      $$->VolHeatCapacity     = $11 ;
+        material->Id                     = $2 ;
+        material->ThermalConductivity    = (SolidTC_t) $6 ;
+        material->VolumetricHeatCapacity = (SolidVHC_t) $11 ;
     }
   ;
 
@@ -267,108 +283,303 @@ material
 /******************************* Heatsink *************************************/
 /******************************************************************************/
 
-environment_heat_sink
+conventional_heat_sink
 
-  : /* empty */
+  : // Declaring the heat sink section is not mandatory
+
   | CONVENTIONAL HEAT SINK ':'
-        HEAT TRANSFER COEFFICIENT DVALUE ';'
-        AMBIENT TEMPERATURE       DVALUE ';'
+        HEAT TRANSFER COEFFICIENT DVALUE ';'  // $8
+        AMBIENT TEMPERATURE       DVALUE ';'  // $12
     {
-      stkd->ConventionalHeatSink = alloc_and_init_conventional_heat_sink() ;
+        stkd->ConventionalHeatSink = alloc_and_init_conventional_heat_sink () ;
 
-      if (stkd->ConventionalHeatSink == NULL)
-      {
-        stack_description_error
-        (
-          stkd, scanner, "malloc conventional heat sink failed"
-        ) ;
-        YYABORT ;
-      }
+        if (stkd->ConventionalHeatSink == NULL)
+        {
+            stack_description_error (stkd, analysis, scanner, "Malloc conventional heat sink failed") ;
 
-      stkd->ConventionalHeatSink->AmbientHTC = $8 ;
-      stkd->ConventionalHeatSink->AmbientTemperature = $12 ;
+            YYABORT ;
+        }
+
+        stkd->ConventionalHeatSink->AmbientHTC         = (AmbientHTC_t) $8 ;
+        stkd->ConventionalHeatSink->AmbientTemperature = $12 ;
     }
   ;
 
 /******************************************************************************/
-/******************************* Channel **************************************/
+/******************************* MicroChannel *********************************/
 /******************************************************************************/
 
-channel
+microchannel
 
-  :  /* empty */
+  : // Declaring the channel section is not mandatory
 
-  |  CHANNEL ':'
-        HEIGHT DVALUE ';'
-        CHANNEL LENGTH DVALUE ';'
-        WALL    LENGTH DVALUE ';'
-        first_wall_length
-        last_wall_length
-        WALL MATERIAL IDENTIFIER ';'
-        COOLANT FLOW RATE DVALUE ';'
-        coolant_heat_transfer_coefficients
-        COOLANT VOLUMETRIC HEAT CAPACITY DVALUE ';'
-        COOLANT INCOMING TEMPERATURE DVALUE ';'
+  |  MICROCHANNEL _4RM ':'
+        HEIGHT DVALUE ';'                             //  $5
+        CHANNEL LENGTH DVALUE ';'                     //  $9
+        WALL    LENGTH DVALUE ';'                     //  $13
+        first_wall_length                             //  $15
+        last_wall_length                              //  $16
+        WALL MATERIAL IDENTIFIER ';'                  //  $19
+        COOLANT FLOW RATE DVALUE ';'                  //  $24
+        coolant_heat_transfer_coefficients_4rm        //  $26
+        COOLANT VOLUMETRIC HEAT CAPACITY DVALUE ';'   //  $31
+        COOLANT INCOMING TEMPERATURE DVALUE ';'       //  $36
     {
-      stkd->Channel = alloc_and_init_channel() ;
+        stkd->Channel = alloc_and_init_channel () ;
 
-      if (stkd->Channel == NULL)
-      {
-        free ($18) ;
-        stack_description_error
-        (
-          stkd, scanner, "malloc channel failed"
-        ) ;
-        YYABORT ;
-      }
+        if (stkd->Channel == NULL)
+        {
+            FREE_POINTER (free, $19) ;
 
-      stkd->Channel->Height          = $4  ;
+            stack_description_error (stkd, analysis, scanner, "Malloc channel failed") ;
 
-      tmp_channel_length             = $8  ;
-      tmp_wall_length                = $12 ;
-      tmp_first_wall_length          = ($14 == 0) ? $12 : $14 ;
-      tmp_last_wall_length           = ($15 == 0) ? $12 : $15 ;
+            YYABORT ;
+        }
 
-      stkd->Channel->CoolantFR       = ( $23 * 1e+12 ) / 60.0 ;
-      stkd->Channel->CoolantHTCs     = $25 ;
-      stkd->Channel->CoolantVHC      = $30 ;
-      stkd->Channel->CoolantTIn      = $35 ;
-      stkd->Channel->Wall
-        = find_material_in_list (stkd->MaterialsList, $18) ;
+        channel_length    = $9 ;
+        wall_length       = $13 ;
+        first_wall_length = ($15 != 0.0) ? $15 : $13 ;
+        last_wall_length  = ($16 != 0.0) ? $16 : $13 ;
 
-      if (stkd->Channel->Wall == NULL)
-      {
-        String_t message
-          = (String_t) malloc ((18 + strlen($18)) * sizeof (char)) ;
-        sprintf (message, "Unknown material %s", $18) ;
+        stkd->Channel->ChannelModel      = TDICE_CHANNEL_MODEL_MC_4RM ;
+        stkd->Channel->NLayers           = NUM_LAYERS_CHANNEL_4RM ;
+        stkd->Channel->SourceLayerOffset = SOURCE_OFFSET_CHANNEL_4RM ;
+        stkd->Channel->Height            = $5 ;
+        stkd->Channel->Coolant.FlowRate  = FLOW_RATE_FROM_MLMIN_TO_UM3SEC ($24) ;
+        stkd->Channel->Coolant.HTCSide   = $26.HTCSide ;
+        stkd->Channel->Coolant.HTCTop    = $26.HTCTop ;
+        stkd->Channel->Coolant.HTCBottom = $26.HTCBottom ;
+        stkd->Channel->Coolant.VHC       = $31 ;
+        stkd->Channel->Coolant.TIn       = $36 ;
+        stkd->Channel->WallMaterial      = find_material_in_list (stkd->MaterialsList, $19) ;
 
-        stack_description_error (stkd, scanner, message) ;
-        free ($18) ;
-        free (message) ;
-        YYABORT ;
-      }
+        if (stkd->Channel->WallMaterial == NULL)
+        {
+            sprintf (error_message, "Unknown material %s", $19) ;
 
-      stkd->Channel->Wall->Used++ ;
+            FREE_POINTER (free, $19) ;
 
-      free ($18) ;
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            YYABORT ;
+        }
+
+        stkd->Channel->WallMaterial->Used++ ;
+
+        FREE_POINTER (free, $19) ;
+    }
+
+  |  MICROCHANNEL _2RM ':'
+        HEIGHT DVALUE ';'                            //  $5
+        CHANNEL LENGTH DVALUE ';'                    //  $9
+        WALL    LENGTH DVALUE ';'                    //  $13
+        WALL MATERIAL IDENTIFIER ';'                 //  $17
+        COOLANT FLOW RATE DVALUE ';'                 //  $22
+        coolant_heat_transfer_coefficients_2rm       //  $24
+        COOLANT VOLUMETRIC HEAT CAPACITY DVALUE ';'  //  $29
+        COOLANT INCOMING TEMPERATURE DVALUE ';'      //  $34
+    {
+        stkd->Channel = alloc_and_init_channel () ;
+
+        if (stkd->Channel == NULL)
+        {
+            FREE_POINTER (free, $17) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc channel failed") ;
+
+            YYABORT ;
+        }
+
+        stkd->Channel->ChannelModel      = TDICE_CHANNEL_MODEL_MC_2RM ;
+        stkd->Channel->NLayers           = NUM_LAYERS_CHANNEL_2RM ;
+        stkd->Channel->SourceLayerOffset = SOURCE_OFFSET_CHANNEL_2RM ;
+        stkd->Channel->Height            = $5 ;
+        stkd->Channel->Length            = $9 ;
+        stkd->Channel->Pitch             = $13 + $9 ;
+        stkd->Channel->Porosity          = stkd->Channel->Length / stkd->Channel->Pitch ;
+        stkd->Channel->Coolant.FlowRate  = FLOW_RATE_FROM_MLMIN_TO_UM3SEC ($22) ;
+        stkd->Channel->Coolant.HTCSide   = $24.HTCSide ;
+        stkd->Channel->Coolant.HTCTop    = $24.HTCTop ;
+        stkd->Channel->Coolant.HTCBottom = $24.HTCBottom ;
+        stkd->Channel->Coolant.VHC       = $29 ;
+        stkd->Channel->Coolant.TIn       = $34 ;
+        stkd->Channel->WallMaterial      = find_material_in_list (stkd->MaterialsList, $17) ;
+
+        if (stkd->Channel->WallMaterial == NULL)
+        {
+            sprintf (error_message, "Unknown material %s", $17) ;
+
+            FREE_POINTER (free, $17) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            YYABORT ;
+        }
+
+        stkd->Channel->WallMaterial->Used++ ;
+
+        FREE_POINTER (free, $17) ;
+    }
+
+  |  PINFIN ':'
+        HEIGHT DVALUE ';'                              //  $4
+        PIN DIAMETER DVALUE ';'                        //  $8
+        PIN PITCH  DVALUE ';'                          //  $12
+        PIN DISTRIBUTION distribution ';'              //  $16
+        PIN MATERIAL IDENTIFIER ';'                    //  $20
+        DARCY VELOCITY DVALUE ';'                      //  $24
+        COOLANT VOLUMETRIC HEAT CAPACITY DVALUE ';'    //  $30
+        COOLANT INCOMING TEMPERATURE DVALUE ';'        //  $35
+    {
+        stkd->Channel = alloc_and_init_channel () ;
+
+        if (stkd->Channel == NULL)
+        {
+            FREE_POINTER (free, $20) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc channel failed") ;
+
+            YYABORT ;
+        }
+
+        stkd->Channel->Height                = $4 ;
+        stkd->Channel->Porosity              = POROSITY ($8, $12) ;
+        stkd->Channel->Pitch                 = $12 ;
+        stkd->Channel->ChannelModel          = $16 ;
+        stkd->Channel->NLayers               = NUM_LAYERS_CHANNEL_2RM ;
+        stkd->Channel->SourceLayerOffset     = SOURCE_OFFSET_CHANNEL_2RM ;
+        stkd->Channel->Coolant.DarcyVelocity = $24 ;
+        stkd->Channel->Coolant.HTCSide       = 0.0 ;
+        stkd->Channel->Coolant.HTCTop        = 0.0 ;
+        stkd->Channel->Coolant.HTCBottom     = 0.0 ;
+        stkd->Channel->Coolant.VHC           = $30 ;
+        stkd->Channel->Coolant.TIn           = $35 ;
+        stkd->Channel->WallMaterial          = find_material_in_list (stkd->MaterialsList, $20) ;
+
+        if (stkd->Channel->WallMaterial == NULL)
+        {
+            sprintf (error_message, "Unknown material %s", $20) ;
+
+            FREE_POINTER (free, $20) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            YYABORT ;
+        }
+
+        stkd->Channel->WallMaterial->Used++ ;
+
+        FREE_POINTER (free, $20) ;
     }
   ;
 
-coolant_heat_transfer_coefficients
+coolant_heat_transfer_coefficients_4rm
 
   : COOLANT HEAT TRANSFER COEFFICIENT DVALUE ';'
     {
-      $$.Side   = $5;
-      $$.Top    = $5;
-      $$.Bottom = $5;
+        $$.HTCSide   = $5 ;
+        $$.HTCTop    = $5 ;
+        $$.HTCBottom = $5 ;
     }
   | COOLANT HEAT TRANSFER COEFFICIENT SIDE   DVALUE ','
                                       TOP    DVALUE ','
                                       BOTTOM DVALUE ';'
     {
-      $$.Side   = $6 ;
-      $$.Top    = $9 ;
-      $$.Bottom = $12;
+        $$.HTCSide   = $6 ;
+        $$.HTCTop    = $9 ;
+        $$.HTCBottom = $12 ;
+    }
+  ;
+
+coolant_heat_transfer_coefficients_2rm
+
+  : COOLANT HEAT TRANSFER COEFFICIENT DVALUE ';'
+    {
+        $$.HTCSide   = 0.0 ;
+        $$.HTCTop    = $5 ;
+        $$.HTCBottom = $5 ;
+    }
+  | COOLANT HEAT TRANSFER COEFFICIENT TOP    DVALUE ','
+                                      BOTTOM DVALUE ';'
+    {
+        $$.HTCSide   = 0.0 ;
+        $$.HTCTop    = $6 ;
+        $$.HTCBottom = $9 ;
+    }
+  ;
+
+first_wall_length
+  :                              { $$ = 0.0 ; } // Not mandatory
+  | FIRST WALL LENGTH DVALUE ';' { $$ = $4 ;  }
+  ;
+
+last_wall_length
+  :                             { $$ = 0.0 ; } // Not mandatory
+  | LAST WALL LENGTH DVALUE ';' { $$ = $4 ;  }
+  ;
+
+distribution
+  : INLINE                      { $$ = TDICE_CHANNEL_MODEL_PF_INLINE ;    }
+  | STAGGERED                   { $$ = TDICE_CHANNEL_MODEL_PF_STAGGERED ; }
+  ;
+
+/******************************************************************************/
+/******************************* Layers ***************************************/
+/******************************************************************************/
+
+layers_list
+
+  :                    // Declaring a "non active" layer in a die is not mandatory
+    {
+        $$ = NULL ;    // The first layer in the list will be null
+    }
+  | layers_list layer  // $1 : pointer to the last layer in the list
+                       // $2 : pointer to the layer to add in the list
+    {
+        if ($1 != NULL)
+            JOIN_ELEMENTS ($2, $1) ; // this reverse the order !
+        $$ = $2 ;                    // $2 will be the new reference to the list
+    }
+  ;
+
+layer         : LAYER  layer_content { $$ = $2 ; } ;
+
+source_layer  : SOURCE layer_content { $$ = $2 ; } ;
+
+layer_content :
+
+    DVALUE IDENTIFIER ';' // $1 and $2
+
+    {
+        Layer *layer = $$ = alloc_and_init_layer () ;
+
+        if (layer == NULL)
+        {
+            FREE_POINTER (free, $2) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc layer failed") ;
+
+            YYABORT ;
+        }
+
+        layer->Height   = $1 ;
+        layer->Material = find_material_in_list (stkd->MaterialsList, $2) ;
+
+        if (layer->Material == NULL)
+        {
+            sprintf (error_message, "Unknown material %s", $2) ;
+
+            FREE_POINTER (free,       $2) ;
+            FREE_POINTER (free_layer, layer) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            YYABORT ;
+        }
+
+        layer->Material->Used++ ;
+
+        FREE_POINTER (free, $2) ;
     }
   ;
 
@@ -378,402 +589,122 @@ coolant_heat_transfer_coefficients
 
 dies_list
 
-  : die             { stkd->DiesList = $1 ; $$ = $1 ; }
-  | dies_list die   { $1->Next = $2       ; $$ = $2 ; }
+  : die                   // $1 : pointer to the first die found
+    {
+        stkd->DiesList = $1 ;
+        $$ = $1 ;         // $1 will be the new die in the list
+    }
+  | dies_list die         // $1 : pointer to the last die in the list
+                          // $2 : pointer to the die to add in the list
+    {
+
+        if (find_die_in_list (stkd->DiesList, $2->Id) != NULL)
+        {
+            sprintf (error_message, "Die %s already declared", $2->Id) ;
+
+            FREE_POINTER (free_die, $2) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            YYABORT ;
+        }
+
+        $1->Next = $2 ;   // insert $2 at the end of the list
+        $$ = $2 ;         // $2 will be the new last element in the list
+    }
   ;
 
 die
 
-  : DIE IDENTIFIER ':'
-       layers_list
-       source_layer
-       layers_list
+  : DIE IDENTIFIER ':'         // $2 Die identifier
+        layers_list            // $4 list of layers (above source -> top)
+        source_layer           // $5 source layer
+        layers_list            // $6 list of layers (bottom -> below source)
     {
-      Layer* layer ;
-      Die* die = $$ = alloc_and_init_die() ;
+        Die *die = $$ = alloc_and_init_die () ;
 
-      if (die == NULL)
-      {
-        free             ($2) ;
-        free_layers_list ($4) ;
-        free_layer       ($5) ;
-        free_layers_list ($6) ;
+        if (die == NULL)
+        {
+            FREE_POINTER (free,             $2) ;
+            FREE_POINTER (free_layers_list, $4) ;
+            FREE_POINTER (free_layer,       $5) ;
+            FREE_POINTER (free_layers_list, $6);
 
-        stack_description_error
-        (
-          stkd, scanner, "malloc die failed"
-        ) ;
-        YYABORT ;
-      }
+            stack_description_error (stkd, analysis, scanner, "Malloc die failed") ;
 
-      if (find_die_in_list(stkd->DiesList, $2) != NULL)
-      {
-        String_t message
-          = (String_t) malloc ((21 + strlen($2)) * sizeof (char)) ;
-        sprintf (message, "Die %s already declared", $2) ;
+            YYABORT ;
+        }
 
-        free             ($2) ;
-        free_layers_list ($4) ;
-        free_layer       ($5) ;
-        free_layers_list ($6) ;
-        free_die (die) ;
-        stack_description_error (stkd, scanner, message) ;
-        free (message) ;
-        YYABORT ;
-      }
+        die->Id = $2 ;
+        die->SourceLayer = $5 ;
 
-      die->Id = $2 ;
+        // The layers within a die are declared in the stack file from top
+        // to bottom but here we revert the order: the first layer in the list
+        // LayersList will be the bottom-most layer in the die
 
-      if ($6 != NULL)
-      {
-        die->LayersList = $6 ;
+        if ($6 != NULL)
+        {
+            // if there are layers below the source,
+            // then the list of layers begins with $6
 
-        layer = $6 ;
-        while (layer->Next != NULL)
-          layer = layer->Next ;
-        layer->Next = $5 ;
-      }
-      else
-        die->LayersList = $5 ;
+            die->BottomLayer = $6 ;
 
-      die->SourceLayer = $5 ;
-      $5->Next = $4 ;
+            die->NLayers++ ;
+            die->SourceLayerOffset++ ;
 
-      layer = die->LayersList ;
-      while (layer != NULL)
-      {
+            // $6 moved until the end ..
+
+            while ($6->Next != NULL)
+            {
+                $6 = $6->Next ;
+
+                die->NLayers++ ;
+                die->SourceLayerOffset++ ;
+            }
+
+            // the list $6 continues with the source layer $5
+
+            JOIN_ELEMENTS ($6, $5) ;
+        }
+        else
+        {
+            // if there aren't layers below the source, the list of layers
+            // begins directly with the source layer $5
+
+            die->BottomLayer = $5 ;
+        }
+
         die->NLayers++ ;
-        layer = layer->Next ;
-      }
-    }
-  ;
 
-/******************************************************************************/
-/******************************* Layers ***************************************/
-/******************************************************************************/
+        if ($4 != NULL)
+        {
+            // if there are layers above the source
+            // $5 is connected to the list $4
 
-layers_list
+            JOIN_ELEMENTS ($5, $4) ;
 
-  : /* empty */   { $$ = NULL ; }
-  | layers        { $$ = $1   ; }
-  ;
+            die->NLayers++ ;
 
-layers
+            // $4 moved until the end ..
 
-  : layer         {                 $$ = $1 ; }
-  | layers layer  { $2->Next = $1 ; $$ = $2 ; }
-  ;
+            while ($4->Next != NULL)
+            {
+                $4 = $4->Next ;
 
-layer         : LAYER  layer_content { $$ = $2 ; } ;
+                die->NLayers++ ;
+            }
 
-source_layer  : SOURCE layer_content { $$ = $2 ; } ;
+            // the list finishes with the last layer in $4
 
-layer_content : DVALUE IDENTIFIER ';'
+            die->TopLayer = $4 ;
+        }
+        else
+        {
+            // if there aren't layers below the source,
+            // The list finishes with the source layer $5
 
-    {
-      Layer* layer = $$ = alloc_and_init_layer() ;
-
-      if (layer == NULL)
-      {
-        free ($2) ;
-        stack_description_error
-        (
-          stkd, scanner, "malloc layer failed"
-        ) ;
-        YYABORT ;
-      }
-
-      layer->Height   = $1 ;
-      layer->Material = find_material_in_list(stkd->MaterialsList, $2) ;
-
-      if (layer->Material == NULL)
-      {
-        String_t message
-          = (String_t) malloc ((18 + strlen($2)) * sizeof (char)) ;
-        sprintf (message, "Unknown material %s", $2) ;
-
-        stack_description_error (stkd, scanner, message) ;
-
-        free ($2) ;
-        free (message) ;
-        free_layer(layer) ;
-        YYABORT ;
-      }
-
-      layer->Material->Used++ ;
-
-      free ($2) ;
-    }
-  ;
-
-/******************************************************************************/
-/******************************* Stack ****************************************/
-/******************************************************************************/
-
-stack
-
-  : STACK ':'
-      stack_elements
-    {
-      //
-      // After parsing with success the list of stack elements ...
-      //
-
-      stkd->StackElementsList = $3 ;
-
-      if (last_stack_element == TDICE_STACK_ELEMENT_CHANNEL)
-      {
-        // Reset for the next parsing ...
-        last_stack_element = TDICE_STACK_ELEMENT_NONE ;
-        found_die          = 0 ;
-        found_channel      = 0 ;
-
-        stack_description_error
-        (
-          stkd, scanner, "channel as bottom stack element not supported"
-        ) ;
-        YYABORT ;
-      }
-
-      if (found_die == 0)
-      {
-        // Reset for the next parsing ...
-        last_stack_element = TDICE_STACK_ELEMENT_NONE ;
-        found_die          = 0 ;
-        found_channel      = 0 ;
-
-        stack_description_error
-        (
-          stkd, scanner, "there must be at least one die in the stack section"
-        ) ;
-        YYABORT ;
-      }
-
-      if (found_channel == 0 && stkd->Channel != NULL)
-
-        fprintf (stderr, "Warning: channel section declared but not used\n") ;
-
-      // Reset for the next parsing ...
-      last_stack_element = TDICE_STACK_ELEMENT_NONE ;
-      found_die          = 0 ;
-      found_channel      = 0 ;
-    }
-  ;
-
-stack_elements
-
-  : stack_element
-    {
-      //
-      // After parsing with success the first stack element ...
-      //
-
-      if (last_stack_element == TDICE_STACK_ELEMENT_CHANNEL)
-      {
-        free_stack_element ($1) ;
-        stack_description_error
-        (
-          stkd, scanner, "channel as top stack element not supported"
-        ) ;
-        YYABORT ;
-      }
-
-      $$ = $1 ;
-    }
-  | stack_elements stack_element
-    {
-      //
-      // After parsing with success all the other stack elements ...
-      //
-
-      if (find_stack_element_in_list($1, $2->Id) != NULL)
-      {
-        String_t message
-          = (String_t) malloc ((31 + strlen($2->Id)) * sizeof (char)) ;
-        sprintf (message, "Stack element %s already declared", $2->Id) ;
-
-        free_stack_element ($2) ;
-        free_stack_elements_list ($1) ;
-        stack_description_error (stkd, scanner, message) ;
-        free (message) ;
-        YYABORT ;
-      }
-
-      $2->Next = $1 ;
-      $$ = $2 ;
-    }
-  ;
-
-stack_element
-
-  : LAYER IDENTIFIER DVALUE IDENTIFIER ';'
-    {
-      //
-      // After parsing with success a layer ...
-      //
-
-      StackElement* stack_element = $$ = alloc_and_init_stack_element() ;
-
-      if (stack_element == NULL)
-      {
-        free ($2) ;
-        free ($4) ;
-        stack_description_error
-        (
-          stkd, scanner, "malloc stack element failed"
-        ) ;
-        YYABORT ;
-      }
-
-      Layer* layer = alloc_and_init_layer() ;
-
-      if (layer == NULL)
-      {
-        free ($2);
-        free ($4) ;
-        free_stack_element (stack_element) ;
-        stack_description_error
-        (
-          stkd, scanner, "malloc layer failed"
-        ) ;
-        YYABORT ;
-      }
-
-      layer->Height   = $3 ;
-      layer->Material = find_material_in_list(stkd->MaterialsList, $4) ;
-
-      if (layer->Material == NULL)
-      {
-        String_t message
-          = (String_t) malloc ((18 + strlen($4)) * sizeof (char)) ;
-        sprintf (message, "Unknown material %s", $4) ;
-
-        stack_description_error (stkd, scanner, message) ;
-
-        free ($2);
-        free ($4) ;
-        free (message) ;
-        free_stack_element (stack_element) ;
-        free_layer(layer) ;
-        YYABORT ;
-      }
-
-      layer->Material->Used++ ;
-
-      free($4) ;
-
-      stack_element->Type          = TDICE_STACK_ELEMENT_LAYER ;
-      stack_element->Pointer.Layer = layer ;
-      stack_element->Id            = $2 ;
-      stack_element->NLayers       = 1 ;
-
-      last_stack_element = TDICE_STACK_ELEMENT_LAYER ;
-    }
-  | CHANNEL IDENTIFIER ';'
-    {
-      //
-      // After parsing with success a layer ...
-      //
-
-      if (stkd->Channel == NULL)
-      {
-        free ($2) ;
-        stack_description_error
-        (
-          stkd, scanner, "channel used in stack but not declared"
-        ) ;
-        YYABORT ;
-      }
-
-      if (last_stack_element == TDICE_STACK_ELEMENT_CHANNEL)
-      {
-        free ($2) ;
-        stack_description_error
-        (
-          stkd, scanner, "two consecutive channel layers not supported"
-        ) ;
-        YYABORT ;
-      }
-
-      StackElement* stack_element = $$ = alloc_and_init_stack_element() ;
-
-      if (stack_element == NULL)
-      {
-        free ($2) ;
-        stack_description_error
-        (
-          stkd, scanner, "malloc stack element failed"
-        ) ;
-        YYABORT ;
-      }
-
-      stack_element->Type    = TDICE_STACK_ELEMENT_CHANNEL ;
-      stack_element->Id      = $2 ;
-      stack_element->NLayers = 1 ;
-
-      found_channel = 1 ;
-      last_stack_element = TDICE_STACK_ELEMENT_CHANNEL ;
-    }
-  | DIE IDENTIFIER IDENTIFIER FLOORPLAN PATH ';'
-    {
-      //
-      // After parsing with success a die ...
-      //
-
-      StackElement* stack_element = $$ = alloc_and_init_stack_element() ;
-
-      if (stack_element == NULL)
-      {
-        free ($2) ;
-        free ($3) ;
-        free ($5) ;
-        stack_description_error
-        (
-          stkd, scanner, "malloc stack element failed"
-        ) ;
-        YYABORT ;
-      }
-
-      stack_element->Type        = TDICE_STACK_ELEMENT_DIE ;
-      stack_element->Id          = $2 ;
-      stack_element->Pointer.Die = find_die_in_list(stkd->DiesList, $3) ;
-
-      if (stack_element->Pointer.Die == NULL)
-      {
-        String_t message
-          = (String_t) malloc ((13 + strlen($3)) * sizeof (char)) ;
-        sprintf (message, "Unknown die %s", $3) ;
-
-        stack_description_error (stkd, scanner, message) ;
-
-        free($3) ;
-        free($5) ;
-        free(message) ;
-        free_stack_element (stack_element) ;
-        YYABORT ;
-      }
-
-      stack_element->NLayers = stack_element->Pointer.Die->NLayers ;
-      stack_element->Floorplan = alloc_and_init_floorplan ();
-
-      if (stack_element->Floorplan == NULL)
-      {
-        free($3) ;
-        free($5) ;
-        free_stack_element (stack_element) ;
-        stack_description_error
-        (
-          stkd, scanner, "malloc floorplan failed"
-        ) ;
-        YYABORT ;
-      }
-
-      stack_element->Floorplan->FileName = $5 ;
-
-      free($3) ;
-
-      found_die = 1 ;
-      last_stack_element = TDICE_STACK_ELEMENT_DIE ;
+            die->TopLayer = $5 ;
+        }
     }
   ;
 
@@ -784,123 +715,775 @@ stack_element
 dimensions
 
   : DIMENSIONS ':'
-      CHIP LENGTH DVALUE ',' WIDTH DVALUE ';'
-      CELL LENGTH DVALUE ',' WIDTH DVALUE ';'
+        CHIP LENGTH DVALUE ',' WIDTH DVALUE ';'    // $5  $8
+        CELL LENGTH DVALUE ',' WIDTH DVALUE ';'    // $12 $15
     {
-      stkd->Dimensions = alloc_and_init_dimensions() ;
+        stkd->Dimensions = alloc_and_init_dimensions () ;
 
-      if (stkd->Dimensions == NULL)
-      {
-        stack_description_error
-        (
-          stkd, scanner, "malloc dimensions failed"
-        ) ;
-        YYABORT ;
-      }
-
-      /* Set widths and NRows */
-
-      stkd->Dimensions->Chip.Width  = (ChipDimension_t) $8 ;
-      stkd->Dimensions->Cell.Width  = (CellDimension_t) $15 ;
-
-      stkd->Dimensions->Grid.NRows
-        = (GridDimension_t)
-          (stkd->Dimensions->Chip.Width / stkd->Dimensions->Cell.Width) ;
-
-      /* Set lengths and NColumns */
-
-      stkd->Dimensions->Chip.Length = (ChipDimension_t) $5 ;
-      stkd->Dimensions->Cell.Length = (CellDimension_t) $12 ;
-
-      if (stkd->Channel == NULL)
-      {
-        /* There are no channels in the stack */
-
-        stkd->Dimensions->StackHasChannel = FALSE_V ;
-
-        stkd->Dimensions->Grid.NColumns
-          = (GridDimension_t)
-            stkd->Dimensions->Chip.Length / stkd->Dimensions->Cell.Length ;
-      }
-      else
-      {
-        /* There are channels in the stack */
-
-        stkd->Dimensions->StackHasChannel = TRUE_V ;
-
-        stkd->Dimensions->Cell.FirstWallLength = tmp_first_wall_length ;
-        stkd->Dimensions->Cell.LastWallLength  = tmp_last_wall_length ;
-        stkd->Dimensions->Cell.WallLength      = tmp_wall_length ;
-        stkd->Dimensions->Cell.ChannelLength   = tmp_channel_length ;
-
-        CellDimension_t ratio
-         = (stkd->Dimensions->Chip.Length
-            - stkd->Dimensions->Cell.FirstWallLength
-            - stkd->Dimensions->Cell.LastWallLength
-            - stkd->Dimensions->Cell.ChannelLength
-           )
-           /
-           ( stkd->Dimensions->Cell.ChannelLength
-             + stkd->Dimensions->Cell.WallLength
-           ) ;
-
-        if ( ratio - (int) ratio != 0)
+        if (stkd->Dimensions == NULL)
         {
-          stack_description_error
-          (
-            stkd, scanner, "cell dimensions does not fit the chip length correctly"
-          ) ;
-          YYABORT ;
+            stack_description_error (stkd, analysis, scanner, "Malloc dimensions failed") ;
+            YYABORT ;
         }
 
-        stkd->Dimensions->Grid.NColumns = 2 * ratio + 3 ;
+        stkd->Dimensions->Chip.Length = $5 ;
+        stkd->Dimensions->Chip.Width  = $8 ;
 
-        if ((stkd->Dimensions->Grid.NColumns & 1) == 0)
+        stkd->Dimensions->Cell.ChannelLength   = $12 ;
+        stkd->Dimensions->Cell.FirstWallLength = $12 ;
+        stkd->Dimensions->Cell.LastWallLength  = $12 ;
+        stkd->Dimensions->Cell.WallLength      = $12 ;
+
+        stkd->Dimensions->Cell.Width  = $15 ;
+
+        stkd->Dimensions->Grid.NRows    = ($8 / $15) ;
+        stkd->Dimensions->Grid.NColumns = ($5 / $12) ;
+
+
+        if (stkd->Channel != NULL)
         {
-          stack_description_error
-          (
-            stkd, scanner, "colum number must be odd when channel is declared"
-          ) ;
-          YYABORT ;
-        }
+            if (stkd->Channel->ChannelModel == TDICE_CHANNEL_MODEL_MC_4RM)
+            {
+                stkd->Dimensions->Cell.ChannelLength   = channel_length ;
+                stkd->Dimensions->Cell.FirstWallLength = first_wall_length ;
+                stkd->Dimensions->Cell.LastWallLength  = last_wall_length ;
+                stkd->Dimensions->Cell.WallLength      = wall_length ;
 
-        /* Check the number of ciolumns get */
+                CellDimension_t ratio
+                    = ($5 - first_wall_length - last_wall_length -channel_length)
+                    /
+                    (channel_length + wall_length) ;
 
-        if (stkd->Dimensions->Grid.NColumns < 3)
-        {
-          stack_description_error (stkd, scanner, "not enough columns") ;
-          YYABORT ;
+                if ( ratio - (int) ratio != 0)
+                {
+                    stack_description_error (stkd, analysis, scanner, "Error: cell dimensions does not fit the chip length correctly") ;
+
+                    YYABORT ;
+                }
+
+                stkd->Dimensions->Grid.NColumns = 2 * ratio + 3 ;
+
+                if ((stkd->Dimensions->Grid.NColumns & 1) == 0)
+                {
+                    stack_description_error (stkd, analysis, scanner, "Error: colum number must be odd when channel is declared") ;
+
+                    YYABORT ;
+                }
+
+                // Check the number of columns
+
+                if (stkd->Dimensions->Grid.NColumns < 3)
+                {
+                    stack_description_error (stkd, analysis, scanner, "Error: not enough columns") ;
+
+                    YYABORT ;
+                }
+
+                stkd->Channel->NChannels = ((stkd->Dimensions->Grid.NColumns - 1 )  / 2) ;
+            }
+            else if (stkd->Channel->ChannelModel == TDICE_CHANNEL_MODEL_MC_2RM)
+            {
+                stkd->Channel->NChannels = (($5 / stkd->Channel->Pitch) + 0.5) ; // round function
+            }
         }
-      }
     }
   ;
 
-first_wall_length
-  : /* empty */                  { $$ = 0 ;  }
-  | FIRST WALL LENGTH DVALUE ';' { $$ = $4 ; }
+/******************************************************************************/
+/******************************* Stack ****************************************/
+/******************************************************************************/
+
+stack
+
+  : STACK ':'
+        stack_elements
+    {
+        if (num_dies == 0u)
+        {
+            stack_description_error (stkd, analysis, scanner, "Error: stack must contain at least one die") ;
+
+            YYABORT ;
+        }
+
+        if (stkd->BottomStackElement->Type == TDICE_STACK_ELEMENT_CHANNEL)
+        {
+            stack_description_error (stkd, analysis, scanner, "Error: cannot declare a channel as bottom-most stack element") ;
+
+            YYABORT ;
+        }
+
+        if (stkd->ConventionalHeatSink == NULL && stkd->Channel == NULL)
+
+            fprintf (stderr, "Warning: neither heat sink nor channel has been declared\n") ;
+
+
+        FOR_EVERY_ELEMENT_IN_LIST_NEXT (Material, material, stkd->MaterialsList)
+
+            if (material->Used == 0)
+
+                fprintf (stderr, "Warning: material %s declared but not used\n", material->Id) ;
+
+
+        FOR_EVERY_ELEMENT_IN_LIST_NEXT (Die, die, stkd->DiesList)
+
+            if (die->Used == 0)
+
+                fprintf (stderr, "Warning: die %s declared but not used\n", die->Id) ;
+
+        if (stkd->ConventionalHeatSink != NULL)
+        {
+            if (stkd->TopStackElement->Type == TDICE_STACK_ELEMENT_LAYER)
+            {
+                stkd->ConventionalHeatSink->TopLayer = stkd->TopStackElement->Pointer.Layer ;
+            }
+            else
+            {
+                stkd->ConventionalHeatSink->TopLayer = stkd->TopStackElement->Pointer.Die->TopLayer ;
+            }
+        }
+
+        // Counts the number of layers and fix the layer offset starting from
+        // the bottom most element in the stack. This operation can be done only
+        // here since the parser processes elements in the stack from the top most.
+
+        CellIndex_t layer_index = 0u ;
+
+        FOR_EVERY_ELEMENT_IN_LIST_NEXT (StackElement, stk_el, stkd->BottomStackElement)
+        {
+            stk_el->Offset = layer_index ;
+            layer_index   += stk_el->NLayers ;
+        }
+
+        stkd->Dimensions->Grid.NLayers = layer_index ;
+
+        // Evaluate the number of cells and nonzero elements
+
+        stkd->Dimensions->Grid.NCells
+            =   get_number_of_layers (stkd->Dimensions)
+                * get_number_of_rows (stkd->Dimensions)
+                * get_number_of_columns (stkd->Dimensions) ;
+
+        if (stkd->Dimensions->Grid.NCells >  INT32_MAX)
+        {
+            sprintf (error_message, "%d are too many cells ... (SuperLU uses 'int')", stkd->Dimensions->Grid.NCells) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            YYABORT ;
+        }
+
+        if (stkd->Channel == NULL)
+
+            compute_number_of_connections
+
+                (stkd->Dimensions, num_channels, TDICE_CHANNEL_MODEL_NONE) ;
+
+        else
+
+            compute_number_of_connections
+
+                (stkd->Dimensions, num_channels, stkd->Channel->ChannelModel) ;
+
+    }
   ;
 
-last_wall_length
-  : /* empty */                 { $$ = 0 ;  }
-  | LAST WALL LENGTH DVALUE ';' { $$ = $4 ; }
+stack_elements
+
+  : stack_element                 // $1 : pointer to the first stack element found
+    {
+        if (   stkd->TopStackElement == NULL && $1->Type == TDICE_STACK_ELEMENT_CHANNEL)
+        {
+            stack_description_error (stkd, analysis, scanner, "Error: cannot declare a channel as top-most stack element") ;
+
+            YYABORT ;
+        }
+
+        stkd->TopStackElement    = $1 ;
+        stkd->BottomStackElement = $1 ;
+        $$ = $1 ;
+    }
+  | stack_elements stack_element  // $1 : pointer to the last stack element in the list
+                                  // $2 : pointer to the stack element to add in the list
+    {
+        if (find_stack_element_in_list ($1, $2->Id) != NULL)
+        {
+            sprintf (error_message, "Stack element %s already declared", $2->Id) ;
+
+            FREE_POINTER (free_stack_element, $2) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            YYABORT ;
+        }
+
+        if (   $1->Type == TDICE_STACK_ELEMENT_CHANNEL
+            && $2->Type == TDICE_STACK_ELEMENT_CHANNEL)
+        {
+            stack_description_error (stkd, analysis, scanner, "Error: cannot declare two consecutive channels") ;
+
+            YYABORT ;
+        }
+
+        JOIN_ELEMENTS ($2, $1) ;
+
+        stkd->BottomStackElement = $2 ;
+        $$ = $2 ;                 // $2 will be the last stack element in the list
+    }
+  ;
+
+stack_element
+
+  : LAYER IDENTIFIER DVALUE IDENTIFIER ';'    // $2 Identifier for the stack element
+                                              // $3 Height of the layer
+                                              // $4 Identifier of the material
+    {
+        StackElement *stack_element = $$ = alloc_and_init_stack_element () ;
+
+        if (stack_element == NULL)
+        {
+            FREE_POINTER (free, $2) ;
+            FREE_POINTER (free, $4) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc stack element failed") ;
+
+            YYABORT ;
+        }
+
+        Layer *layer = alloc_and_init_layer () ;
+
+        if (layer == NULL)
+        {
+            FREE_POINTER (free,               $2) ;
+            FREE_POINTER (free,               $4) ;
+            FREE_POINTER (free_stack_element, stack_element) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc layer failed") ;
+
+            YYABORT ;
+        }
+
+        layer->Height   = $3 ;
+        layer->Material = find_material_in_list (stkd->MaterialsList, $4) ;
+
+        if (layer->Material == NULL)
+        {
+            sprintf (error_message, "Unknown material %s", $4) ;
+
+            FREE_POINTER (free,               $2) ;
+            FREE_POINTER (free,               $4) ;
+            FREE_POINTER (free_stack_element, stack_element) ;
+            FREE_POINTER (free_layer,         layer) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            YYABORT ;
+        }
+
+        layer->Material->Used++ ;
+
+        FREE_POINTER (free, $4) ;
+
+        stack_element->Type          = TDICE_STACK_ELEMENT_LAYER ;
+        stack_element->Pointer.Layer = layer ;
+        stack_element->Id            = $2 ;
+        stack_element->NLayers       = 1 ;
+    }
+
+  | CHANNEL IDENTIFIER ';'  // $2 Identifier for the stack element
+    {
+        num_channels++ ;
+
+        if (stkd->Channel == NULL)
+        {
+            stack_description_error (stkd, analysis, scanner, "Error: channel used in stack but not declared") ;
+
+            YYABORT ;
+        }
+
+        StackElement *stack_element = $$ = alloc_and_init_stack_element () ;
+
+        if (stack_element == NULL)
+        {
+            FREE_POINTER (free, $2) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc stack element failed") ;
+
+            YYABORT ;
+        }
+
+        stack_element->Type            = TDICE_STACK_ELEMENT_CHANNEL ;
+        stack_element->Pointer.Channel = stkd->Channel ; // This might be NULL !!!
+        stack_element->Id              = $2 ;
+        stack_element->NLayers         = stkd->Channel->NLayers ;
+    }
+
+  | DIE IDENTIFIER IDENTIFIER FLOORPLAN PATH ';'  // $2 Identifier for the stack element
+                                                  // $3 Identifier of the die
+                                                  // $5 Path of the floorplan file
+    {
+        num_dies++ ;
+
+        StackElement *stack_element = $$ = alloc_and_init_stack_element () ;
+
+        if (stack_element == NULL)
+        {
+            FREE_POINTER (free, $2) ;
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc stack element failed") ;
+
+            YYABORT ;
+        }
+
+        stack_element->Type        = TDICE_STACK_ELEMENT_DIE ;
+        stack_element->Id          = $2 ;
+        stack_element->Pointer.Die = find_die_in_list (stkd->DiesList, $3) ;
+
+        if (stack_element->Pointer.Die == NULL)
+        {
+            sprintf (error_message, "Unknown die %s", $3) ;
+
+            FREE_POINTER (free,               $3) ;
+            FREE_POINTER (free,               $5) ;
+            FREE_POINTER (free_stack_element, stack_element) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            YYABORT ;
+        }
+
+        stack_element->Pointer.Die->Used++ ;
+
+        stack_element->NLayers = stack_element->Pointer.Die->NLayers ;
+        stack_element->Floorplan = alloc_and_init_floorplan () ;
+
+        if (stack_element->Floorplan == NULL)
+        {
+            FREE_POINTER (free,               $3) ;
+            FREE_POINTER (free,               $5) ;
+            FREE_POINTER (free_stack_element, stack_element) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc floorplan failed") ;
+
+            YYABORT ;
+        }
+
+        if (   fill_floorplan (stack_element->Floorplan, stkd->Dimensions, $5)
+            == TDICE_FAILURE)
+        {
+            FREE_POINTER (free,                   $3) ;
+            FREE_POINTER (free,                   $5) ;
+            FREE_POINTER (free_stack_description, stkd) ;
+
+            YYABORT ; // CHECKME error messages printed in this case ....
+        }
+
+        FREE_POINTER (free, $5) ;  // FIXME check memory leak
+        FREE_POINTER (free, $3) ;
+    }
+  ;
+
+/******************************************************************************/
+/******************************* Solevr type **********************************/
+/******************************************************************************/
+
+solver
+
+  : SOLVER ':' STEADY ';'
+    {
+        // StepTime is set to 1 to avoid division by zero when computing
+        // the capacitance of a thermal cell
+
+        analysis->AnalysisType = TDICE_ANALYSIS_TYPE_STEADY ;
+        analysis->StepTime     = (Time_t) 1.0 ;
+        analysis->SlotTime     = (Time_t) 0.0 ;
+        analysis->SlotLength   = 1u ; // CHECKME
+    }
+
+  | SOLVER ':' TRANSIENT STEP DVALUE ',' SLOT DVALUE ';'  // $5 StepTime
+                                                          // $8 SlotTime
+    {
+        if ($8 < $5)
+        {
+            stack_description_error
+
+                (stkd, analysis, scanner, "Slot time must be higher than StepTime") ;
+
+            YYABORT ;
+        }
+
+        if ($5 <= 0.0)
+        {
+            stack_description_error
+
+                (stkd, analysis, scanner, "StepTime must be a positive value") ;
+
+            YYABORT ;
+        }
+
+        if ($8 <= 0.0)
+        {
+            stack_description_error
+
+                (stkd, analysis, scanner, "SlotTime must be a positive value") ;
+
+            YYABORT ;
+        }
+
+        analysis->AnalysisType = TDICE_ANALYSIS_TYPE_TRANSIENT ;
+        analysis->StepTime     = (Time_t) $5 ;
+        analysis->SlotTime     = (Time_t) $8 ;
+        analysis->SlotLength   = (Quantity_t) ( $8 / $5 ) ;
+    }
+  ;
+
+/******************************************************************************/
+/*************************** Initial Temperature ******************************/
+/******************************************************************************/
+
+initial_temperature
+
+  : INITIAL_ TEMPERATURE DVALUE ';'
+    {
+        analysis->InitialTemperature = (Temperature_t) $3;
+    }
+  ;
+
+/******************************************************************************/
+/****************************** Desired Output ********************************/
+/******************************************************************************/
+
+inspection_points
+
+  :  // Declaring this section is not mandatory
+
+  |  OUTPUT ':' inspection_points_list
+
+  ;
+
+inspection_points_list
+
+  :  inspection_point // $1 : pointer to the first inspection point found
+     {
+        add_inspection_point_to_analysis (analysis, $1) ;
+     }
+
+  |  inspection_points_list inspection_point
+                      // $1 : not used
+                      // $2 : pointer to the inspection point to add in the list
+     {
+        add_inspection_point_to_analysis (analysis, $2) ;
+     }
+  ;
+
+inspection_point
+
+  :  TCELL '(' IDENTIFIER ',' DVALUE ',' DVALUE ',' PATH when ')' ';'
+
+     // $3       Identifier of the stack element (layer, channel or die)
+     // ($5, $7) Coordinates of the cell to monitor
+     // $9       Path of the output file
+     // $10      when to generate output for this observation
+
+     {
+        StackElement *stack_element =
+
+            find_stack_element_in_list (stkd->BottomStackElement, $3) ;
+
+        if (stack_element == NULL)
+        {
+            sprintf (error_message, "Unknown stack element %s", $3) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $9) ;
+
+            YYABORT ;
+        }
+
+        Tcell *tcell = alloc_and_init_tcell () ;
+
+        if (tcell == NULL)
+        {
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $9) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc tcell failed") ;
+
+            YYABORT ;
+        }
+
+        align_tcell (tcell, $5, $7, stkd->Dimensions) ;
+
+        InspectionPoint *inspection_point = $$ = alloc_and_init_inspection_point () ;
+
+        if (inspection_point == NULL)
+        {
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $9) ;
+
+            FREE_POINTER (free_tcell, tcell) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc inspection point command failed") ;
+
+            YYABORT ;
+        }
+
+        inspection_point->Type          = TDICE_OUTPUT_TYPE_TCELL ;
+        inspection_point->Instant       = $10 ;
+        inspection_point->FileName      = $9 ;
+        inspection_point->Pointer.Tcell = tcell ;
+        inspection_point->StackElement  = stack_element ;
+
+        FREE_POINTER (free, $3) ;
+     }
+
+  |  TFLP  '(' IDENTIFIER ',' PATH ',' maxminavg when ')'  ';'
+
+     // $3 Identifier of the stack element (must be a die)
+     // $5 Path of the output file
+     // $7 temperature type
+     // $8 when to generate output for this observation
+
+     {
+        StackElement *stack_element =
+
+            find_stack_element_in_list (stkd->BottomStackElement, $3) ;
+
+        if (stack_element == NULL)
+        {
+            sprintf (error_message, "Unknown stack element %s", $3) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+
+            YYABORT ;
+        }
+
+        if (stack_element->Type != TDICE_STACK_ELEMENT_DIE)
+        {
+            sprintf (error_message, "The stack element %s must be a die", $3) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+
+            YYABORT ;
+        }
+
+        Tflp *tflp = alloc_and_init_tflp () ;
+
+        if (tflp == NULL)
+        {
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc tflp failed") ;
+
+            YYABORT ;
+        }
+
+        tflp->Quantity = $7 ;
+
+        InspectionPoint *inspection_point = $$ = alloc_and_init_inspection_point () ;
+
+        if (inspection_point == NULL)
+        {
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+
+            FREE_POINTER (free_tflp, tflp) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc inspection point command failed") ;
+
+            YYABORT ;
+        }
+
+        inspection_point->Type         = TDICE_OUTPUT_TYPE_TFLP ;
+        inspection_point->Instant      = $8 ;
+        inspection_point->FileName     = $5 ;
+        inspection_point->Pointer.Tflp = tflp ;
+        inspection_point->StackElement = stack_element ;
+
+        FREE_POINTER (free, $3) ;
+     }
+
+  |  TFLPEL '(' IDENTIFIER '.' IDENTIFIER ',' PATH ',' maxminavg when ')' ';'
+
+     // $3  Identifier of the stack element (must be a die)
+     // $5  Identifier of the floorplan element
+     // $7  Path of the output file
+     // $9  temperature type
+     // $10 when to generate output for this observation
+
+     {
+        StackElement *stack_element =
+
+            find_stack_element_in_list (stkd->BottomStackElement, $3) ;
+
+        if (stack_element == NULL)
+        {
+            sprintf (error_message, "Unknown stack element %s", $3) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+            FREE_POINTER (free, $7) ;
+
+            YYABORT ;
+        }
+
+        if (stack_element->Type != TDICE_STACK_ELEMENT_DIE)
+        {
+            sprintf (error_message, "The stack element %s must be a die", $3) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+            FREE_POINTER (free, $7) ;
+
+            YYABORT ;
+        }
+
+        FloorplanElement *floorplan_element = find_floorplan_element_in_list
+
+            (stack_element->Floorplan->ElementsList, $5) ;
+
+        if (floorplan_element == NULL)
+        {
+            sprintf (error_message, "Unknown floorplan element %s", $5) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+            FREE_POINTER (free, $7) ;
+
+            YYABORT ;
+        }
+
+        Tflpel *tflpel = alloc_and_init_tflpel () ;
+
+        if (tflpel == NULL)
+        {
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+            FREE_POINTER (free, $7) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc Tflpel failed") ;
+
+            YYABORT ;
+        }
+
+        tflpel->FloorplanElement = floorplan_element ;
+        tflpel->Quantity         = $9 ;
+
+        InspectionPoint *inspection_point = $$ = alloc_and_init_inspection_point () ;
+
+        if (inspection_point == NULL)
+        {
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+            FREE_POINTER (free, $7) ;
+
+            FREE_POINTER (free_tflpel, tflpel) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc inspection point command failed") ;
+
+            YYABORT ;
+        }
+
+        inspection_point->Type           = TDICE_OUTPUT_TYPE_TFLPEL ;
+        inspection_point->Instant        = $10 ;
+        inspection_point->FileName       = $7 ;
+        inspection_point->Pointer.Tflpel = tflpel ;
+        inspection_point->StackElement   = stack_element ;
+
+        FREE_POINTER (free, $3) ;
+        FREE_POINTER (free, $5) ;
+     }
+
+  |  TMAP '(' IDENTIFIER ',' PATH when ')' ';'
+
+     // $3 Identifier of the stack element (layer, channel or die)
+     // $5 Path of the output file
+     // $6 when to generate output for this observation
+
+     {
+        StackElement *stack_element =
+
+            find_stack_element_in_list (stkd->BottomStackElement, $3) ;
+
+        if (stack_element == NULL)
+        {
+            sprintf (error_message, "Unknown stack element %s", $3) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+
+            YYABORT ;
+        }
+
+        InspectionPoint *inspection_point = $$ = alloc_and_init_inspection_point () ;
+
+        if (inspection_point == NULL)
+        {
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc inspection point out command failed") ;
+
+            YYABORT ;
+        }
+
+        inspection_point->Type         = TDICE_OUTPUT_TYPE_TMAP ;
+        inspection_point->Instant      = $6 ;
+        inspection_point->FileName     = $5 ;
+        inspection_point->StackElement = stack_element ;
+
+        FREE_POINTER (free, $3) ;
+     }
+
+  ;
+
+maxminavg
+
+  :  MAXIMUM { $$ =  TDICE_OUTPUT_QUANTITY_MAXIMUM ; }
+  |  MINIMUM { $$ =  TDICE_OUTPUT_QUANTITY_MINIMUM ; }
+  |  AVERAGE { $$ =  TDICE_OUTPUT_QUANTITY_AVERAGE ; }
+  ;
+
+when
+
+  :  // Declaring the instance option is not mandatory (final is assumed)
+                { $$ =  TDICE_OUTPUT_FINAL ; }
+  |  ',' STEP   { $$ =  TDICE_OUTPUT_STEP ;  }
+  |  ',' SLOT   { $$ =  TDICE_OUTPUT_SLOT ;  }
+  |  ',' FINAL  { $$ =  TDICE_OUTPUT_FINAL ; }
   ;
 
 %%
 
 void stack_description_error
 (
-  StackDescription* stkd,
-  yyscan_t          scanner,
-  String_t          message
+    StackDescription *stkd,
+    Analysis          __attribute__ ((unused)) *analysis,
+    yyscan_t          scanner,
+    String_t          message
 )
 {
-  fprintf
-  (
-    stack_description_get_out (scanner),
-    "%s:%d: %s\n",
-    stkd->FileName,
-    stack_description_get_lineno (scanner),
-    message
-  ) ;
-  free_stack_description (stkd) ;
+    fprintf (stack_description_get_out (scanner),
+             "%s:%d: %s\n",
+            stkd->FileName, stack_description_get_lineno (scanner), message) ;
+
+    FREE_POINTER (free_stack_description, stkd) ;
 }

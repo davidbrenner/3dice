@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
+ *          Giseong Bak                                                       *
  *          Martino Ruggiero                                                  *
  *          Thomas Brunschwiler                                               *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -36,150 +39,302 @@
 #ifndef _3DICE_STACK_DESCRIPTION_H_
 #define _3DICE_STACK_DESCRIPTION_H_
 
+/*! \file stack_description.h */
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
+/******************************************************************************/
+
 #include <stdio.h>
 
-#include "material.h"
+#include "types.h"
+
+#include "analysis.h"
 #include "channel.h"
-#include "die.h"
-#include "stack_element.h"
-#include "dimensions.h"
-#include "conductances.h"
 #include "conventional_heat_sink.h"
+#include "die.h"
+#include "dimensions.h"
+#include "floorplan_element.h"
+#include "material.h"
+#include "powers_queue.h"
+#include "stack_element.h"
+#include "system_matrix.h"
+#include "thermal_cell.h"
 
 /******************************************************************************/
 
-  typedef struct
-  {
-    /* The name of the file used to fill the stack description */
+    /*! \struct StackDescription
+     *
+     * \brief Structure containing all the informations related to the 3d stack
+     */
 
-    String_t FileName ;
+    struct StackDescription
+    {
+        /*! The name of the file used to fill the stack description */
 
-    /* The list of materials componing the layers and channels */
+        String_t FileName ;
 
-    Material* MaterialsList ;
+        /*! The list of materials componing the layers and channel walls */
 
-    /* The (if present) single type of channel used to compose the 3d stack */
+        Material *MaterialsList ;
 
-    Channel* Channel ;
+        /*! Information about the heat dissipation throught the top surface */
 
-    /* The list of dies available to compose the 3d stack */
+        ConventionalHeatSink *ConventionalHeatSink ;
 
-    Die* DiesList ;
+        /*! Information about the (unique) type of channel used in the 3d stack */
 
-    /* Information (if present) about the heat dissipation */
-    /* throught the top surface                            */
+        Channel *Channel ;
 
-    ConventionalHeatSink* ConventionalHeatSink;
+        /*! The list of dies available to compose the 3d stack */
 
-    /* The list of stack elements componing the 3Dstack */
+        Die *DiesList ;
 
-    StackElement* StackElementsList ;
+        /*! Pointer to the top-most stack elements componing the 3Dstack */
 
-    /* Collection of all the dimensions (chip, grid of cells, cell) */
+        StackElement *TopStackElement ;
 
-    Dimensions* Dimensions ;
+        /*! Pointer to the bottom-most stack elements componing the 3Dstack */
 
-  } StackDescription ;
+        StackElement *BottomStackElement ;
 
-/******************************************************************************/
+        /*! Collection of all the dimensions (chip, grid of cells, cell) */
 
-  /* Sets all the fields of stkd to a default value                         */
+        Dimensions *Dimensions ;
+    } ;
 
-  void init_stack_description (StackDescription* stkd) ;
 
-/******************************************************************************/
 
-  /* Fills the stkd structure parsing the *.stk file                        */
-  /*                                                                        */
-  /* Returns:                                                               */
-  /*                                                                        */
-  /* -1 if the .stk file does not exist                                     */
-  /*  0 if the parsing succeeds                                             */
-  /*  1 if there is an error in the .stk file or in one of the .flp files   */
-  /*       used in it (message printed to stderr).                          */
-  /*                                                                        */
-  /* Note: The function parses the .stk file first and then all the .flp    */
-  /* files related to the floorplans following the order used in the stack  */
-  /* section (from bottom to top). It stops as soon as it finds an error    */
-  /* and it returns 1, discarding the remaining files to parse.             */
+    /*! Definition of the type StackDescription */
 
-  int fill_stack_description (StackDescription* stkd, String_t filename) ;
+    typedef struct StackDescription StackDescription ;
 
 /******************************************************************************/
 
-  /* Frees all the memory                                                   */
 
-  void free_stack_description (StackDescription* stkd) ;
 
-/******************************************************************************/
+    /*! Sets all the fields of \a stkd to a default value (zero or \c NULL ).
+     *
+     * \param stkd the address of the StackDescription to initialize
+     */
 
-  /* Print on stream (stdout, stderr or a given opened output file) all the */
-  /* data related to the stkd structure previously filled. Prefix is a      */
-  /* string (it can be empty as "") printed as prefix at the beginning of   */
-  /* every line.                                                            */
-  /*                                                                        */
-  /* To print the content of only one of the fields of stkd, use the        */
-  /* printing function in the corresponding header file                     */
+    void init_stack_description (StackDescription* stkd) ;
 
-  void print_stack_description
-  (
-    FILE*             stream,
-    String_t          prefix,
-    StackDescription* stkd
-  ) ;
 
-/******************************************************************************/
 
-  /* Print on stream (stdout, stderr or a given opened output file) all the */
-  /* data related to the floorplan structures contained in the dies.        */
-  /* Prefix is a string (it can be empty as "") printed as prefix at the    */
-  /* beginning of every line.                                               */
+    /*! Fills the \a stkd and \a analysis structures with the content
+     *  of a stack file
+     *
+     * \param stkd the address of the StackDescription structure to fill
+     * \param analysis the address of the Analysis structure to fill
+     * \param filename the path of the stack file
+     *
+     * \return \c TDICE_FAILURE if the file cannot be opened or if the parsing
+     *                  of the stack description fails
+     * \return \c TDICE_FAILURE otherwise
+     */
 
-  void print_all_floorplans
-  (
-    FILE*             stream,
-    String_t          prefix,
-    StackDescription* stkd
-  ) ;
+    int fill_stack_description
 
-/******************************************************************************/
+        (StackDescription* stkd, Analysis *analysis, String_t filename) ;
 
-  /* Returns the number of remaining power values (time slots) to emulate   */
 
-  Quantity_t get_number_of_remaining_power_values (StackDescription* stkd) ;
 
-/******************************************************************************/
+    /*! Frees the memory related to \a stkd
+     *
+     * The parametrer \a stkd must be the address of a static variable
+     *
+     * \param stkd the address of the StackDescription structure to free
+     */
 
-  /* Given a StackDescription and the id (string) of a floorplan, returns   */
-  /* the number of all the floorplan elements in that floorplan.            */
-  /* The floorplan_id, is the string used to name the die stack element it  */
-  /* belongs to (refers to the the .stk file used to fill stkd)             */
-  /*                                                                        */
-  /* Returns:                                                               */
-  /*                                                                        */
-  /*   -1 if the stack element id floorplan_id does not exist               */
-  /*   -2 if floorplan_id exists but it is not the id of a die or it        */
-  /*      belongs to a die but the floorplan itself does not exist          */
-  /* >= 0 the number of floorplan elements in floorplan_id                  */
+    void free_stack_description (StackDescription* stkd) ;
 
-  Quantity_t get_number_of_floorplan_elements
-  (
-    StackDescription* stkd,
-    String_t floorplan_id
-  ) ;
 
-/******************************************************************************/
 
-  /* Given a StackDescription, returns the number of channels outlets in a  */
-  /* channel layer (the number of channels is the number of liquid columns  */
-  /* and it is the same for every channel layer)                            */
+    /*! Prints the stack descritpion as it looks in the stack file
+     *
+     * \param stream the output stream (must be already open)
+     * \param prefix a string to be printed as prefix at the beginning of each line
+     * \param stkd   the pointer to the StackDescription to print
+     */
 
-  Quantity_t get_number_of_channel_outlets (StackDescription* stkd) ;
+    void print_formatted_stack_description
+
+        (FILE *stream, String_t prefix, StackDescription *stkd) ;
+
+
+
+    /*! Prints a list of detailed information about the stack descritpion
+     *
+     * \param stream the output stream (must be already open)
+     * \param prefix a string to be printed as prefix at the beginning of each line
+     * \param stkd   the pointer to the StackDescription to print
+     */
+
+    void print_detailed_stack_description
+
+        (FILE *stream, String_t prefix, StackDescription* stkd) ;
+
+
+
+    /*! Prints the floorplans (detilaed info) used in the stack file
+     *
+     * \param stream the output stream (must be already open)
+     * \param prefix a string to be printed as prefix at the beginning of each line
+     * \param stkd   the pointer to the StackDescription
+     */
+
+    void print_floorplans
+
+        (FILE *stream, String_t prefix, StackDescription *stkd) ;
+
+
+
+    /*! Fills the 3d grid of thermal cells
+     *
+     *  The function fills all the thermal cells representing the 3d volume
+     *  of the IC stack, starting from the bottom-most stack element. If the
+     *  heat sink is used, it adapts the top-most layer to connect it to
+     *  the enviroment and enable heat dissipation. If the simulation typed
+     *  is steady state it resets the capacitance of each thermal cell.
+     *
+     *  \param thermal_cells pointer to the first thermal cell in the 3d grid
+     *  \param analysis      pointer to the steructure containing info about the type of analysis
+     *  \param stkd          pointer to the stack descritpion structure
+     */
+
+    void fill_thermal_cell_stack_description
+    (
+        ThermalCell      *thermal_cells,
+        Analysis         *analysis,
+        StackDescription *stkd
+    ) ;
+
+
+
+    /*! Fills the source vector
+     *
+     *  The function resets the source vector. If the heat sink is used,
+     *  it inserts power values into the thermal cells in the top-most layer.
+     *  Then, it extracts power traces from each floorplan elements and power
+     *  related to the inlet of the channels.
+     *
+     *  \param sources       pointer to the first element in the source vector
+     *  \param thermal_cells pointer to the first thermal cell in the 3d grid
+     *  \param stkd          pointer to the stack descritpion structure
+     *
+     *  \return \c TDICE_SUCCESS if the source vector has been filled correctly
+     *  \return \c TDICE_FAILURE if it not possible to fill the source vector
+     *                           (at least one floorplan element with no power
+     *                            values in its queue)
+     */
+
+    Error_t fill_sources_stack_description
+    (
+        Source_t         *sources,
+        ThermalCell      *thermal_cells,
+        StackDescription *stkd
+    ) ;
+
+
+
+    /*! Fills the system matrix
+     *
+     *  The function fills, stack element by stack element, all the columns
+     *  of the system matrix. If the heat sink is used, the coefficients
+     *  related to the last layer are updated.
+     *
+     *  \param system_matrix copy of the system matrix structure
+     *  \param thermal_cells pointer to the first thermal cell in the 3d grid
+     *  \param stkd          pointer to the stack descritpion structure
+     */
+
+    void fill_system_matrix_stack_description
+    (
+        SystemMatrix      system_matrix,
+        ThermalCell      *thermal_cells,
+        StackDescription *stkd
+    ) ;
+
+
+
+    /*! Returns the number of floorplan elements in a stack element
+     *
+     * The parameter \a stack_element_id must refer to the ID given to a stack
+     * element (of type die) in the stack file used to to fill \a stkd
+     *
+     * \param stkd address of the StackDescription structure
+     * \param stack_element_id the id of the stack element
+     *
+     * \return \c 0 if stack_element_id does not exist in the stack or if it
+     *              does not refer to a die.
+     * \return the number of floorplan elements in \a stack_element_id
+     */
+
+    Quantity_t get_number_of_floorplan_elements
+
+        (StackDescription* stkd, String_t stack_element_id) ;
+
+
+
+    /*! Returns the total number of floorplan elements in the whole 3d stack
+     *
+     * \param stkd address of the StackDescription structure
+     *
+     * \return the total nyumber of floorplan elements in the 3d stack
+     */
+
+    Quantity_t get_total_number_of_floorplan_elements (StackDescription *stkd) ;
+
+
+
+    /*! Returns a pointer to a floorplan element in the stack
+     *
+     * \param stkd address of the StackDescription structure
+     * \param stack_element_id id of the stack element as in the stack file
+     * \param floorplan_element_id id of the floorplan element as in the
+     *                             floorplan file
+     *
+     * \return \c NULL if \a stack_element_id does not exist in the stack
+     * \return \c NULL if \a stack_element_id is not a die stack element
+     * \return \c NULL if \a floorplan_element_id does not exist in the floorplan
+     * \return the pointer to the floorplan element \a floorplan_element_id
+     *         that belongs to the floorplan on the die stack element
+     *         \a stack_element_id
+     */
+
+    FloorplanElement *get_floorplan_element
+
+        (StackDescription *stkd,
+         String_t stack_element_id, String_t floorplan_element_id) ;
+
+
+
+    /*! Inserts one power values from \a pvaluse into each floorplan element
+     *  in the stack
+     *
+     *  The queue \a pvalues must contain at least as many power values as
+     *  the number of floorplan elements in the entire stack. \a pvalues is a
+     *  FIFO queue and, whithin the stack, elements are considered from the
+     *  bottom (the last element declared in the stack section of the
+     *  stack description file). If the stack has two dies \c A (bottom) and
+     *  \c B (top) and A has a floorplan with \c n elements while \c B has \c m
+     *  elements, then \a pvalues must contain at least \c nm elements. The
+     *  first \c n power values will be given to \c A and the remaining will
+     *  be assigned to \c B
+     *
+     *  \param stkd address of the StackDescription structure
+     *  \param pvalues pointer to the list of power values
+     *
+     *  \return \c TDICE_FAILURE if the queue \a pvalues does not contain enough
+     *                           power values
+     *  \return \c TDICE_SUCCESS otherwise
+     */
+
+    Error_t insert_power_values (StackDescription *stkd, PowersQueue *pvalues) ;
 
 /******************************************************************************/
 

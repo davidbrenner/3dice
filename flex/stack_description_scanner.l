@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
+ *          Giseong Bak                                                       *
  *          Martino Ruggiero                                                  *
  *          Thomas Brunschwiler                                               *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -34,12 +37,6 @@
  ******************************************************************************/
 
 %{
-#include <string.h>
-#include <stdlib.h>
-
-#include "types.h"
-#include "die.h"
-#include "stack_element.h"
 #include "../bison/stack_description_parser.h"
 %}
 
@@ -99,7 +96,7 @@
 unsigned_integer        [[:digit:]]+
 signed_integer          [+-]?[[:digit:]]+
 exponent                [eE]{signed_integer}
-double                  {signed_integer}\.{unsigned_integer}{exponent}?
+double                  {signed_integer}(\.{unsigned_integer}{exponent}?)?
 identifier              [[:alpha:]](\_|[[:alnum:]])*
 path_begin              (\.{1,2}\/|\/)?
 path                    \"{path_begin}{identifier}(\/|\.{1,2}|{identifier})*\"
@@ -120,54 +117,78 @@ path                    \"{path_begin}{identifier}(\/|\.{1,2}|{identifier})*\"
 
 [[:space:]]*                 ;
 
+"("                          return yytext[0] ;
+")"                          return yytext[0] ;
+","                          return yytext[0] ;
+"."                          return yytext[0] ;
+":"                          return yytext[0] ;
+";"                          return yytext[0] ;
+
 "//"                         BEGIN(ONE_LINE_COMMENT) ;
 "/*"                         BEGIN(MULTIPLE_LINE_COMMENT) ;
 
-":"                          return yytext[0] ;
-","                          return yytext[0] ;
-";"                          return yytext[0] ;
-
+"2rm"                        return _2RM ;
+"4rm"                        return _4RM ;
 "ambient"                    return AMBIENT ;
+"average"                    return AVERAGE ;
 "bottom"                     return BOTTOM ;
 "capacity"                   return CAPACITY ;
 "cell"                       return CELL ;
 "channel"                    return CHANNEL ;
 "chip"                       return CHIP ;
 "coefficient"                return COEFFICIENT ;
+"conductivity"               return CONDUCTIVITY ;
 "conventional"               return CONVENTIONAL ;
 "coolant"                    return COOLANT ;
-"conductivity"               return CONDUCTIVITY ;
+"darcy"                      return DARCY ;
+"diameter"                   return DIAMETER ;
 "die"                        return DIE ;
 "dimensions"                 return DIMENSIONS ;
+"distribution"               return DISTRIBUTION ;
+"final"                      return FINAL ;
 "first"                      return FIRST ;
 "floorplan"                  return FLOORPLAN ;
 "flow"                       return FLOW ;
 "heat"                       return HEAT ;
 "height"                     return HEIGHT ;
 "incoming"                   return INCOMING ;
-"layer"                      return LAYER ;
+"initial"                    return INITIAL_ ;
+"inline"                     return INLINE ;
 "last"                       return LAST ;
+"layer"                      return LAYER ;
 "length"                     return LENGTH ;
 "material"                   return MATERIAL ;
-"on"                         return ON ;
+"maximum"                    return MAXIMUM ;
+"microchannel"               return MICROCHANNEL ;
+"minimum"                    return MINIMUM ;
+"output"                     return OUTPUT ;
+"pin"                        return PIN ;
+"pinfin"                     return PINFIN ;
+"pitch"                      return PITCH ;
 "rate"                       return RATE ;
 "side"                       return SIDE ;
 "sink"                       return SINK ;
+"slot"                       return SLOT ;
+"solver"                     return SOLVER ;
 "source"                     return SOURCE ;
-"specific"                   return SPECIFIC ;
 "stack"                      return STACK ;
+"staggered"                  return STAGGERED ;
+"state"                      return STATE ;
+"steady"                     return STEADY ;
+"step"                       return STEP ;
+"T"                          return TCELL ;
 "temperature"                return TEMPERATURE ;
+"Tflp"                       return TFLP ;
+"Tflpel"                     return TFLPEL ;
 "thermal"                    return THERMAL ;
 "top"                        return TOP ;
+"Tmap"                       return TMAP ;
 "transfer"                   return TRANSFER ;
+"transient"                  return TRANSIENT ;
+"velocity"                   return VELOCITY ;
 "volumetric"                 return VOLUMETRIC ;
 "wall"                       return WALL ;
 "width"                      return WIDTH ;
-
-{signed_integer}   {
-                     yylval->double_v = atof(yytext) ;
-                     return DVALUE ;
-                   }
 
 {double}           {
                      yylval->double_v = atof(yytext) ;
@@ -175,7 +196,7 @@ path                    \"{path_begin}{identifier}(\/|\.{1,2}|{identifier})*\"
                    }
 
 {identifier}       {
-                     yylval->char_p = strdup(yytext) ;
+                     yylval->string = strdup(yytext) ;
                      return IDENTIFIER ;
                    }
 
@@ -187,24 +208,26 @@ path                    \"{path_begin}{identifier}(\/|\.{1,2}|{identifier})*\"
 
                      // but we add one place for ‘\0’ when allocating
 
-                     yylval->char_p = (char *) malloc (sizeof(char) * (n + 1)) ;
+                     yylval->string =
+
+                         (String_t) malloc (sizeof(*yylval->string) * (n + 1)) ;
 
                      // we copy from the character after the first "
 
-                     strncpy (yylval->char_p,
-                              yytext + (1 * sizeof (char)),
-                              n * sizeof(char)) ;
+                     strncpy (yylval->string,
+                              yytext + (1 * sizeof (*yylval->string)),
+                              n * sizeof(*yylval->string)) ;
 
                      // We finally add the ‘\0’ at the and of the string
 
-                     yylval->char_p [n] = '\0' ;
+                     yylval->string [n] = '\0' ;
 
                      return PATH ;
                    }
 
-<ONE_LINE_COMMENT>\n              BEGIN(INITIAL);
+<ONE_LINE_COMMENT>\n              BEGIN(INITIAL) ;
 <ONE_LINE_COMMENT>.               ;
-<MULTIPLE_LINE_COMMENT>"*/"       BEGIN(INITIAL);
+<MULTIPLE_LINE_COMMENT>"*/"       BEGIN(INITIAL) ;
 <MULTIPLE_LINE_COMMENT>[^*\n]+    ;
 <MULTIPLE_LINE_COMMENT>"*"[^/]    ;
 <MULTIPLE_LINE_COMMENT>\n         ;

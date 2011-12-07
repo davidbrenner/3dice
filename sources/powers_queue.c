@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
+ *          Giseong Bak                                                       *
  *          Martino Ruggiero                                                  *
  *          Thomas Brunschwiler                                               *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -36,111 +39,123 @@
 #include <stdlib.h>
 
 #include "powers_queue.h"
+#include "macros.h"
 
 /******************************************************************************/
 
-void init_powers_queue (PowersQueue* queue)
+void init_powers_queue (PowersQueue *powers_queue)
 {
-  queue->Head = NULL ;
-  queue->Tail = NULL ;
-  queue->Length = 0 ;
+    powers_queue->Head   = NULL ;
+    powers_queue->Tail   = NULL ;
+    powers_queue->Length = 0u ;
 }
 
 /******************************************************************************/
 
-PowersQueue* alloc_and_init_powers_queue (void)
+PowersQueue *alloc_and_init_powers_queue (void)
 {
-  PowersQueue* queue = (PowersQueue*) malloc (sizeof(PowersQueue)) ;
+    PowersQueue *powers_queue = (PowersQueue *) malloc (sizeof(PowersQueue)) ;
 
-  if (queue != NULL)  init_powers_queue (queue) ;
+    if (powers_queue != NULL)
 
-  return queue ;
+        init_powers_queue (powers_queue) ;
+
+    return powers_queue ;
 }
 
 /******************************************************************************/
 
-Bool_t is_empty_powers_queue (PowersQueue* queue)
+void free_powers_queue (PowersQueue *powers_queue)
 {
-  return (queue->Length == 0) ;
+    while (! is_empty_powers_queue(powers_queue))
+
+        pop_from_powers_queue(powers_queue) ;
+
+    FREE_POINTER (free, powers_queue) ;
 }
 
 /******************************************************************************/
 
-void free_powers_queue (PowersQueue* queue)
+void print_detailed_powers_queue
+(
+    FILE        *stream,
+    String_t     prefix,
+    PowersQueue *powers_queue
+)
 {
-  while (! is_empty_powers_queue(queue) )
+    fprintf(stream, "%s [%d] ", prefix, powers_queue->Length) ;
 
-    pop_from_powers_queue(queue) ;
+    PowerNode *tmp = NULL ;
+    for (tmp = powers_queue->Head ; tmp != NULL ; tmp = tmp->Next)
 
-  free (queue) ;
+        fprintf(stream, "%6.4f ", tmp->Value) ;
+
+    fprintf(stream, "\n") ;
 }
 
 /******************************************************************************/
 
-void put_into_powers_queue (PowersQueue* queue, Power_t power)
+void print_formatted_powers_queue (FILE *stream, PowersQueue *powers_queue)
 {
-  PowerNode* tmp = queue->Tail ;
+    PowerNode *tmp = NULL ;
+    for (tmp = powers_queue->Head ; tmp != NULL ; tmp = tmp->Next)
 
-  queue->Tail = (PowerNode*) malloc ( sizeof(PowerNode) ) ;
-
-  if ( queue->Tail == NULL )
-  {
-    fprintf (stderr, "malloc power node error !!\n") ;
-    return ;
-  }
-
-  queue->Tail->Value = power ;
-  queue->Tail->Next  = NULL ;
-
-  if (queue->Head == NULL)
-
-    queue->Head = queue->Tail ;
-
-  else
-
-    tmp->Next = queue->Tail ;
-
-  queue->Length++;
+        fprintf(stream, "%6.4f ", tmp->Value) ;
 }
 
 /******************************************************************************/
 
-Power_t get_from_powers_queue (PowersQueue* queue)
+bool is_empty_powers_queue (PowersQueue *powers_queue)
 {
-  return queue->Head->Value ;
+    return (powers_queue->Length == 0) ;
 }
 
 /******************************************************************************/
 
-void pop_from_powers_queue (PowersQueue* queue)
+void put_into_powers_queue (PowersQueue *powers_queue, Power_t power)
 {
-  PowerNode* tmp = queue->Head->Next ;
+    PowerNode *tmp = powers_queue->Tail ;
 
-  free(queue->Head) ;
+    powers_queue->Tail = malloc (sizeof(PowerNode)) ;
 
-  queue->Head = tmp ;
+    if ( powers_queue->Tail == NULL )
+    {
+        fprintf (stderr, "malloc power node error !!\n") ;
+        return ;
+    }
 
-  queue->Length--;
+    powers_queue->Tail->Value = power ;
+    powers_queue->Tail->Next  = NULL ;
+
+    if (powers_queue->Head == NULL)
+
+        powers_queue->Head = powers_queue->Tail ;
+
+    else
+
+        tmp->Next = powers_queue->Tail ;
+
+    powers_queue->Length++;
 }
 
 /******************************************************************************/
 
-void print_powers_queue (FILE* stream, String_t prefix, PowersQueue* queue)
+Power_t get_from_powers_queue (PowersQueue *powers_queue)
 {
-  PowerNode* tmp;
-  fprintf(stream, "%s [%d] ", prefix, queue->Length);
-  for (tmp = queue->Head ; tmp != NULL ; tmp = tmp->Next)
-    fprintf(stream, "%6.4f ", tmp->Value) ;
-  fprintf(stream, "\n");
+    return powers_queue->Head->Value ;
 }
 
 /******************************************************************************/
 
-void print_formatted_powers_queue (FILE* stream, PowersQueue* queue)
+void pop_from_powers_queue (PowersQueue *powers_queue)
 {
-  PowerNode* tmp;
-  for (tmp = queue->Head ; tmp != NULL ; tmp = tmp->Next)
-    fprintf(stream, "%6.4f ", tmp->Value) ;
+    PowerNode *tmp = powers_queue->Head->Next ;
+
+    FREE_POINTER (free, powers_queue->Head) ;
+
+    powers_queue->Head = tmp ;
+
+    powers_queue->Length--;
 }
 
 /******************************************************************************/

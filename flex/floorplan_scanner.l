@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
+ *          Giseong Bak                                                       *
  *          Martino Ruggiero                                                  *
  *          Thomas Brunschwiler                                               *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -34,10 +37,6 @@
  ******************************************************************************/
 
 %{
-#include <string.h>
-#include <stdlib.h>
-
-#include "floorplan_element.h"
 #include "../bison/floorplan_parser.h"
 %}
 
@@ -132,23 +131,23 @@ identifier     [[:alpha:]](\_|[[:alnum:]])*
 "values"              return VALUES ;
 
 {identifier}          {
-                        yylval->string = strdup(yytext) ;
+                        yylval->identifier = strdup(yytext) ;
                         return IDENTIFIER ;
                       }
 
 {s_integer}           {
-                        yylval->d_value = atof(yytext) ;
+                        yylval->power_value = atof(yytext) ;
                         return DVALUE ;
                       }
 
 {double}              {
-                        yylval->d_value = atof(yytext) ;
+                        yylval->power_value = atof(yytext) ;
                         return DVALUE ;
                       }
 
-<ONE_LINE_COMMENT>\n              BEGIN(INITIAL);
+<ONE_LINE_COMMENT>\n              BEGIN(INITIAL) ;
 <ONE_LINE_COMMENT>.               ;
-<MULTIPLE_LINE_COMMENT>"*/"       BEGIN(INITIAL);
+<MULTIPLE_LINE_COMMENT>"*/"       BEGIN(INITIAL) ;
 <MULTIPLE_LINE_COMMENT>[^*\n]+    ;
 <MULTIPLE_LINE_COMMENT>"*"[^/]    ;
 <MULTIPLE_LINE_COMMENT>\n         ;

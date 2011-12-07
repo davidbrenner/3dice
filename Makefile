@@ -1,5 +1,5 @@
  ##############################################################################
- # This file is part of 3D-ICE, version 1.0.3 .                               #
+ # This file is part of 3D-ICE, version 2.0 .                                 #
  #                                                                            #
  # 3D-ICE is free software: you can  redistribute it and/or  modify it  under #
  # the terms of the  GNU General  Public  License as  published by  the  Free #
@@ -20,12 +20,15 @@
  #                                                                            #
  # Authors: Arvind Sridhar                                                    #
  #          Alessandro Vincenzi                                               #
+ #          Giseong Bak                                                       #
  #          Martino Ruggiero                                                  #
  #          Thomas Brunschwiler                                               #
  #          David Atienza                                                     #
  #                                                                            #
  # For any comment, suggestion or request  about 3D-ICE, please  register and #
  # write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) #
+ # Any usage  of 3D-ICE  for research,  commercial or other  purposes must be #
+ # properly acknowledged in the resulting products or publications.           #
  #                                                                            #
  # EPFL-STI-IEL-ESL                                                           #
  # Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          #
@@ -37,9 +40,9 @@
 
 include $(3DICE_MAIN)/makefile.def
 
-.PHONY: all lib examples clean
+.PHONY: all lib bin test doc clean
 
-all: lib examples
+all: lib bin
 
 lib:
 	cd $(3DICE_FLEX)    ; make ;
@@ -47,13 +50,21 @@ lib:
 	cd $(3DICE_SOURCES) ; make ;
 	cd $(3DICE_LIB)     ; make ;
 
-examples: lib
-	cd $(3DICE_EXAMPLES) ; make ;
+bin: lib
+	cd $(3DICE_BIN) ; make ;
+
+test: lib bin
+	cd $(3DICE_TEST) ; make ;
+
+doc:
+	cd $(3DICE_DOC) ; make doc ;
 
 clean:
-	cd $(3DICE_FLEX)       ; make clean ;
-	cd $(3DICE_BISON)      ; make clean ;
-	cd $(3DICE_SOURCES)    ; make clean ;
-	cd $(3DICE_LIB)        ; make clean ;
-	cd $(3DICE_EXAMPLES)   ; make clean ;
+	cd $(3DICE_FLEX)    ; make clean ;
+	cd $(3DICE_BISON)   ; make clean ;
+	cd $(3DICE_SOURCES) ; make clean ;
+	cd $(3DICE_LIB)     ; make clean ;
+	cd $(3DICE_BIN)     ; make clean ;
+	cd $(3DICE_TEST)    ; make clean ;
+	cd $(3DICE_DOC)     ; make clean ;
 

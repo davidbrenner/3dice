@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
+ *          Giseong Bak                                                       *
  *          Martino Ruggiero                                                  *
  *          Thomas Brunschwiler                                               *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -37,279 +40,260 @@
 #include <string.h>
 
 #include "die.h"
+#include "macros.h"
 
 /******************************************************************************/
 
-void init_die (Die* die)
+void init_die (Die *die)
 {
-  die->Id          = NULL ;
-  die->LayersList  = NULL ;
-  die->NLayers     = 0    ;
-  die->SourceLayer = NULL ;
-  die->Next        = NULL ;
+    die->Id                = NULL ;
+    die->Used              = 0u ;
+    die->NLayers           = 0u ;
+    die->SourceLayerOffset = 0u ;
+    die->TopLayer          = NULL ;
+    die->SourceLayer       = NULL ;
+    die->BottomLayer       = NULL ;
+    die->Next              = NULL ;
 }
 
 /******************************************************************************/
 
-Die* alloc_and_init_die (void)
+Die *alloc_and_init_die (void)
 {
-  Die* die = (Die*) malloc ( sizeof(Die) ) ;
+    Die *die = (Die *) malloc (sizeof(Die)) ;
 
-  if (die != NULL) init_die (die) ;
+    if (die != NULL)
 
-  return die ;
+        init_die (die) ;
+
+    return die ;
 }
 
 /******************************************************************************/
 
-void free_die (Die* die)
+void free_die (Die *die)
 {
-  free_layers_list (die->LayersList) ;
-  free (die->Id) ;
-  free (die) ;
+    if (die->Id != NULL)
+
+        FREE_POINTER (free, die->Id) ;
+
+    die->TopLayer = NULL ;
+    FREE_POINTER (free_layers_list, die->BottomLayer) ;
+
+    FREE_POINTER (free, die) ;
 }
 
 /******************************************************************************/
 
-void free_dies_list (Die* list)
+void free_dies_list (Die *list)
 {
-  Die* next ;
-
-  for ( ; list != NULL ; list = next)
-  {
-    next = list->Next ;
-    free_die(list) ;
-  }
+    FREE_LIST (Die, list, free_die) ;
 }
 
 /******************************************************************************/
 
-void print_die (FILE* stream, String_t prefix, Die* die)
+Die *find_die_in_list (Die *list, String_t id)
 {
-  fprintf (stream,
-    "%sDie %s:\n",                prefix, die->Id) ;
-  fprintf (stream,
-    "%s  Number of layers  %d\n", prefix, die->NLayers);
-
-  fprintf (stream,
-    "%s  Source layer is layer #%d\n", prefix, die->SourceLayer->LayersOffset);
-
-  String_t new_prefix = (String_t) malloc (sizeof(char)*(strlen(prefix) + 2));
-  // FIXME typeof(pointed by string)
-
-  strcpy (new_prefix, prefix) ;
-  strcat (new_prefix, "  ") ;
-
-  print_layers_list (stream, new_prefix, die->LayersList) ;
-
-  free (new_prefix) ;
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT (Die, die, list)
+    {
+        if (strcmp(die->Id, id) == 0) break ;
+    }
+    return die ;
 }
 
 /******************************************************************************/
 
-void print_dies_list (FILE* stream, String_t prefix, Die* list)
+void print_formatted_die (FILE  *stream, String_t prefix, Die *die)
 {
-  for ( ; list != NULL ; list = list->Next)
+    String_t new_prefix_layer = (String_t)
 
-    print_die (stream, prefix, list) ;
+        malloc (sizeof (*new_prefix_layer) * (10 + strlen(prefix))) ;
+
+    String_t new_prefix_source = (String_t)
+
+        malloc (sizeof (*new_prefix_source) * (10 + strlen(prefix))) ;
+
+    if (new_prefix_layer == NULL) return ;
+
+    if (new_prefix_source == NULL) return ;
+
+    sprintf (new_prefix_layer,  "%s    layer", prefix) ;
+    sprintf (new_prefix_source, "%s   source", prefix) ;
+
+    fprintf (stream, "%sdie %s :\n", prefix, die->Id) ;
+
+    FOR_EVERY_ELEMENT_IN_LIST_PREV (Layer, layer, die->TopLayer)
+    {
+        if (layer == die->SourceLayer)
+
+            print_formatted_layer (stream, new_prefix_source, layer) ;
+
+        else
+
+            print_formatted_layer (stream, new_prefix_layer, layer) ;
+    }
+
+    FREE_POINTER (free, new_prefix_layer) ;
+    FREE_POINTER (free, new_prefix_source) ;
 }
 
 /******************************************************************************/
 
-Die* find_die_in_list (Die* list, String_t id)
+void print_formatted_dies_list (FILE  *stream, String_t prefix, Die *list)
 {
-  for ( ; list != NULL ; list = list->Next)
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT (Die, die, list)
+    {
+        print_formatted_die (stream, prefix, die) ;
 
-    if (strcmp(list->Id, id) == 0) break ;
+        fprintf (stream, "%s\n", prefix) ;
 
-  return list ;
+        if (die->Next != NULL && die->Next->Next == NULL)
+
+            break ;
+    }
+
+    print_formatted_die (stream, prefix, die) ;
 }
 
 /******************************************************************************/
 
-Conductances* fill_conductances_die
+void print_detailed_die (FILE  *stream, String_t prefix, Die *die)
+{
+    String_t new_prefix = (String_t)
+
+        malloc (sizeof (*new_prefix) * (5 + strlen(prefix))) ;
+
+    if (new_prefix == NULL) return ;
+
+    sprintf (new_prefix, "%s    ", prefix) ;
+
+    fprintf (stream,
+        "%sdie                         = %p\n",
+        prefix, die) ;
+
+    fprintf (stream,
+        "%s  Id                        = %s\n",
+        prefix, die->Id) ;
+
+    fprintf (stream,
+        "%s  Used                      = %d\n",
+        prefix, die->Used) ;
+
+    fprintf (stream,
+        "%s  NLayers                   = %d\n",
+        prefix, die->NLayers) ;
+
+    fprintf (stream,
+        "%s  SourceLayerOffset         = %d\n",
+        prefix, die->SourceLayerOffset) ;
+
+    fprintf (stream,
+        "%s  TopLayer                  = %p\n",
+        prefix, die->TopLayer) ;
+
+    fprintf (stream,
+        "%s  SourceLayer               = %p\n",
+        prefix, die->SourceLayer) ;
+
+    fprintf (stream,
+        "%s  BottomLayer               = %p\n",
+        prefix, die->BottomLayer) ;
+
+    fprintf (stream, "%s\n", prefix) ;
+
+    print_detailed_layers_list (stream, new_prefix, die->BottomLayer) ;
+
+    fprintf (stream, "%s\n", prefix) ;
+
+    fprintf (stream,
+        "%s  Next                      = %p\n",
+        prefix, die->Next) ;
+
+    FREE_POINTER (free, new_prefix) ;
+}
+
+/******************************************************************************/
+
+void print_detailed_dies_list (FILE  *stream, String_t prefix, Die *list)
+{
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT (Die, die, list)
+    {
+        print_detailed_die (stream, prefix, die) ;
+
+        fprintf (stream, "%s\n", prefix) ;
+
+        if (die->Next != NULL && die->Next->Next == NULL)
+
+            break ;
+    }
+
+    print_detailed_die (stream, prefix, die) ;
+}
+
+/******************************************************************************/
+
+void fill_thermal_cell_die
 (
-  Die*                  die,
-  Conductances*         conductances,
-  Dimensions*           dimensions,
-  ConventionalHeatSink* conventionalheatsink,
-  LayerIndex_t          current_layer
+    ThermalCell *thermal_cells,
+    Time_t       delta_time,
+    Dimensions  *dimensions,
+    CellIndex_t  layer_index,
+    Die         *die
 )
 {
-  Layer* layer ;
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT (Layer, layer, die->BottomLayer)
 
-# ifdef PRINT_CONDUCTANCES
-  fprintf (stderr, "fill_conductances_die   %s\n", die->Id) ;
-# endif
+        fill_thermal_cell_layer
 
-  for
-  (
-    layer =  die->LayersList;
-    layer != NULL ;
-    layer = layer->Next
-  )
-
-    conductances = fill_conductances_layer
-                   (
-                     layer,
-                     conductances,
-                     dimensions,
-                     conventionalheatsink,
-                     current_layer + layer->LayersOffset
-                   ) ;
-
-  return conductances ;
+            (thermal_cells, delta_time, dimensions, layer_index++, layer) ;
 }
 
 /******************************************************************************/
 
-Capacity_t* fill_capacities_die
+Error_t fill_sources_die
 (
-# ifdef PRINT_CAPACITIES
-  LayerIndex_t current_layer,
-# endif
-  Die*         die,
-  Capacity_t*  capacities,
-  Dimensions*  dimensions,
-  Time_t       delta_time
+    Source_t   *sources,
+    Dimensions *dimensions,
+    CellIndex_t layer_index,
+    Floorplan  *floorplan,
+    Die        *die
 )
 {
-  Layer* layer ;
-
-# ifdef PRINT_CAPACITIES
-  fprintf (stderr,
-    "current_layer = %d\tfill_capacities_die %s\n",
-    current_layer, die->Id) ;
-# endif
-
-  for
-  (
-    layer = die->LayersList ;
-    layer != NULL ;
-    layer = layer->Next
-  )
-
-    capacities = fill_capacities_layer
-                 (
-#                  ifdef PRINT_CAPACITIES
-                   current_layer + layer->LayersOffset,
-#                  endif
-                   layer,
-                   capacities,
-                   dimensions,
-                   delta_time
-                 ) ;
-
-  return capacities ;
-}
-
-/******************************************************************************/
-
-Source_t* fill_sources_die
-(
-# ifdef PRINT_SOURCES
-  GridDimension_t       current_layer,
-# endif
-  Die*                  die,
-  Floorplan*            floorplan,
-  Source_t*             sources,
-  Dimensions*           dimensions
-)
-{
-  Layer* layer = NULL ;
-
 #ifdef PRINT_SOURCES
-  fprintf (stderr,
-    "current_layer = %d\tfill_sources_die %s floorplan %s\n",
-    current_layer, die->Id, floorplan->FileName) ;
+    fprintf (stderr,
+        "layer_index = %d\tfill_sources_die %s floorplan %s\n",
+        layer_index, die->Id, floorplan->FileName) ;
 #endif
 
-  for
-  (
-    layer = die->LayersList ;
-    layer != NULL ;
-    layer = layer->Next
-  )
+    layer_index += die->SourceLayerOffset ;
 
-    if ( die->SourceLayer == layer )
+    sources += get_cell_offset_in_stack (dimensions, layer_index, 0, 0) ;
 
-      sources = fill_sources_active_layer
-                (
-#                 ifdef PRINT_SOURCES
-                  layer,
-                  current_layer + layer->LayersOffset,
-#                 endif
-                  floorplan,
-                  sources,
-                  dimensions
-                ) ;
-
-    else
-
-      sources = fill_sources_empty_layer
-                (
-#                 ifdef PRINT_SOURCES
-                  layer,
-                  current_layer + layer->LayersOffset,
-#                 endif
-                  sources,
-                  dimensions
-                ) ;
-
-  return sources ;
+    return fill_sources_floorplan (sources, dimensions, floorplan) ;
 }
 
 /******************************************************************************/
 
-Quantity_t fill_system_matrix_die
+SystemMatrix fill_system_matrix_die
 (
-  Die*                  die,
-  Dimensions*           dimensions,
-  Conductances*         conductances,
-  Capacity_t*           capacities,
-  ConventionalHeatSink* conventionalheatsink,
-  LayerIndex_t          current_layer,
-  ColumnIndex_t*        column_pointers,
-  RowIndex_t*           row_indices,
-  SystemMatrixValue_t*  values
+    Die          *die,
+    Dimensions   *dimensions,
+    ThermalCell  *thermal_cells,
+    CellIndex_t   layer_index,
+    SystemMatrix  system_matrix
 )
 {
-  Layer* layer ;
-  Quantity_t tot_added, added ;
-
 # ifdef PRINT_SYSTEM_MATRIX
-  fprintf (stderr, "(l %2d) fill_system_matrix_die\n", current_layer) ;
+    fprintf (stderr, "(l %2d) fill_system_matrix_die\n", layer_index) ;
 # endif
 
-  for
-  (
-    added     = 0 ,
-    tot_added = 0 ,
-    layer     = die->LayersList ;
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT (Layer, layer, die->BottomLayer)
 
-    layer != NULL ;
+        system_matrix = fill_system_matrix_layer
 
-    conductances    += get_layer_area (dimensions) ,
-    capacities      += get_layer_area (dimensions) ,
-    column_pointers += get_layer_area (dimensions) ,
-    row_indices     += added ,
-    values          += added ,
-    tot_added       += added ,
-    layer            = layer->Next
-  )
+            (dimensions, thermal_cells, layer_index++, system_matrix) ;
 
-    added = fill_system_matrix_layer
-            (
-#             ifdef PRINT_SYSTEM_MATRIX
-              layer,
-#             endif
-              dimensions, conductances, capacities,
-              conventionalheatsink,
-              current_layer + layer->LayersOffset,
-              column_pointers, row_indices, values
-            ) ;
-
-  return tot_added ;
+    return system_matrix ;
 }
 
 /******************************************************************************/

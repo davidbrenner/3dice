@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
+ *          Giseong Bak                                                       *
  *          Martino Ruggiero                                                  *
  *          Thomas Brunschwiler                                               *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -36,132 +39,196 @@
 #ifndef _3DICE_LAYER_H_
 #define _3DICE_LAYER_H_
 
+/*! \file layer.h */
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
+/******************************************************************************/
+
 #include <stdio.h>
 
 #include "types.h"
-#include "material.h"
+
 #include "dimensions.h"
-#include "conductances.h"
-#include "floorplan.h"
-#include "conventional_heat_sink.h"
+#include "material.h"
+#include "system_matrix.h"
+#include "thermal_cell.h"
 
 /******************************************************************************/
 
-  struct Layer
-  {
-    /* The heigh of the layer in um. (1 cell) */
+    /*! \struct Layer
+     *
+     *  \brief Structure used to store data about the layers that compose the 2D/3D stack.
+     *
+     *  Layers are used to build dies os as stack elements
+     */
 
-    CellDimension_t Height ;
+    struct Layer
+    {
+        /*! The heigh of the layer in \f$ \mu m \f$ (1 cell) */
 
-    /* The material composing the layer */
+        CellDimension_t Height ;
 
-    Material* Material ;
+        /*! The material composing the layer */
 
-    /* The offset (#of layers) counting from the first layer in the die */
+        Material *Material ;
 
-    LayerIndex_t LayersOffset ;
+        /*! Pointer to the 'next' layer (towards the top of the die),
+         *  to collect layers in a double linked list */
 
-    /* To collect layers in a linked list */
+        struct Layer *Next ;
 
-    struct Layer* Next ;
-  } ;
+        /*! Pointer to the 'previous' layer (towards the bottom of the die),
+         *  to collect layers in a double linked list */
 
-  typedef struct Layer Layer;
+        struct Layer *Prev ;
+    } ;
 
-/******************************************************************************/
+    /*! Definition of the type Layer */
 
-  void init_layer (Layer* layer) ;
-
-/******************************************************************************/
-
-  Layer* alloc_and_init_layer (void) ;
-
-/******************************************************************************/
-
-  void free_layer (Layer* layer) ;
-
-/******************************************************************************/
-
-  void free_layers_list (Layer* list) ;
+    typedef struct Layer Layer ;
 
 /******************************************************************************/
 
-  void print_layer (FILE* stream, String_t prefix, Layer* layer) ;
 
-/******************************************************************************/
 
-  void print_layers_list (FILE* stream, String_t prefix, Layer* list) ;
+    /*! Sets all the fields of \a layer to a default value (zero or \c NULL ).
+     *
+     * \param layer the address of the layer to initialize
+     */
 
-/******************************************************************************/
+    void init_layer (Layer *layer) ;
 
-  Conductances* fill_conductances_layer
-  (
-    Layer*                layer,
-    Conductances*         conductances,
-    Dimensions*           dimensions,
-    ConventionalHeatSink* conventionalheatsink,
-    LayerIndex_t          current_layer
-  ) ;
 
-/******************************************************************************/
 
-  Capacity_t* fill_capacities_layer
-  (
-#   ifdef PRINT_CAPACITIES
-    LayerIndex_t current_layer,
-#   endif
-    Layer*       layer,
-    Capacity_t*  capacities,
-    Dimensions*  dimensions,
-    Time_t       delta_time
-  ) ;
+    /*! Allocates a Layer in memory and sets its fields to their default
+     *  value with \c init_layer
+     *
+     * \return the pointer to a new Layer
+     * \return \c NULL if the memory allocation fails
+     */
 
-/******************************************************************************/
+    Layer *alloc_and_init_layer (void) ;
 
-  Source_t* fill_sources_active_layer
-  (
-#   ifdef PRINT_SOURCES
-    Layer*                layer,
-    LayerIndex_t          current_layer,
-#   endif
-    Floorplan*            floorplan,
-    Source_t*             sources,
-    Dimensions*           dimensions
-  ) ;
 
-/******************************************************************************/
 
-  Source_t* fill_sources_empty_layer
-  (
-#   ifdef PRINT_SOURCES
-    Layer*                layer,
-    LayerIndex_t          current_layer,
-#   endif
-    Source_t*             sources,
-    Dimensions*           dimensions
-  ) ;
+    /*! Frees the memory related to \a layer
+     *
+     * The parametrer \a layer must be a pointer previously obtained with
+     * \c alloc_and_init_layer
+     *
+     * \param layer the address of the layer structure to free
+     */
 
-/******************************************************************************/
+    void free_layer (Layer *layer) ;
 
-  Quantity_t fill_system_matrix_layer
-  (
-#   ifdef PRINT_SYSTEM_MATRIX
-    Layer*                layer,
-#   endif
-    Dimensions*           dimensions,
-    Conductances*         conductances,
-    Capacity_t*           capacities,
-    ConventionalHeatSink* conventionalheatsink,
-    LayerIndex_t          current_layer,
-    ColumnIndex_t*        column_pointers,
-    RowIndex_t*           row_indices,
-    SystemMatrixValue_t*  values
-  ) ;
+
+
+    /*! Frees a list of layers
+     *
+     * If frees, calling \c free_layer, the layer pointed by the
+     * parameter \a list and all the layer it finds following the
+     * linked list throught the field Layer::Next.
+     *
+     * \param list the pointer to the first elment in the list to be freed
+     */
+
+    void free_layers_list (Layer *list) ;
+
+
+
+    /*! Prints the layer as it looks in the stack file
+     *
+     * \param stream the output stream (must be already open)
+     * \param prefix a string to be printed as prefix at the beginning of each line
+     * \param layer  the layer to print
+     */
+
+    void print_formatted_layer
+
+        (FILE *stream, String_t prefix, Layer *layer) ;
+
+
+
+    /*! Prints a list of layers as they look in the stack file
+     *
+     * \param stream the output stream (must be already open)
+     * \param prefix a string to be printed as prefix at the beginning of each line
+     * \param list   the pointer to the first layer in the list
+     */
+
+    void print_formatted_layers_list
+
+        (FILE *stream, String_t prefix, Layer *list) ;
+
+
+
+    /*! Prints detailed information about all the fields of a layer
+     *
+     * \param stream  the output stream (must be already open)
+     * \param prefix  a string to be printed as prefix at the beginning of each line
+     * \param layer   the layer to print
+     */
+
+    void print_detailed_layer
+
+        (FILE *stream, String_t prefix, Layer *layer) ;
+
+
+
+    /*! Prints a list of detailed information about all the fields of the layers
+     *
+     * \param stream the output stream (must be already open)
+     * \param prefix a string to be printed as prefix at the beginning of each line
+     * \param list the pointer to the first layer in the list
+     */
+
+    void print_detailed_layers_list
+
+        (FILE *stream, String_t prefix, Layer *list) ;
+
+
+
+    /*! Fills the thermal cells corresponding to a layer in the stack
+     *
+     *  \param thermal_cells pointer to the first thermal cell in the 3d stack
+     *  \param delta_time    the time resolution of the thermal simulation
+     *  \param dimensions    pointer to the structure storing the dimensions
+     *  \param layer_index   offset (\# layers) of the layer within the stack
+     *  \param layer         pointer to the layer
+     */
+
+    void fill_thermal_cell_layer
+    (
+        ThermalCell *thermal_cells,
+        Time_t       delta_time,
+        Dimensions  *dimensions,
+        CellIndex_t  layer_index,
+        Layer       *layer
+    ) ;
+
+
+
+    /*! Fills the system matrix
+     *
+     *  \param dimensions    pointer to the structure storing the dimensions
+     *  \param thermal_cells pointer to the first thermal cell in the 3d stack
+     *  \param layer_index   offset (\# layers) of the die within the stack
+     *  \param system_matrix copy of the system matrix structure
+     *
+     *  \return A matrix partially filled (FIXME)
+     */
+
+    SystemMatrix fill_system_matrix_layer
+    (
+        Dimensions   *dimensions,
+        ThermalCell  *thermal_cells,
+        CellIndex_t   layer_index,
+        SystemMatrix  system_matrix
+    ) ;
 
 /******************************************************************************/
 

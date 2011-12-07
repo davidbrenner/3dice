@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
+ *          Giseong Bak                                                       *
  *          Martino Ruggiero                                                  *
  *          Thomas Brunschwiler                                               *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -35,6 +38,8 @@
 
 #ifndef _3DICE_CHANNEL_H_
 #define _3DICE_CHANNEL_H_
+
+/*! \file channel.h */
 
 #ifdef __cplusplus
 extern "C"
@@ -46,116 +51,186 @@ extern "C"
 #include <stdio.h>
 
 #include "types.h"
+
+#include "dimensions.h"
 #include "material.h"
-#include "conductances.h"
+#include "system_matrix.h"
+#include "thermal_cell.h"
 
 /******************************************************************************/
 
-  typedef struct
-  {
+    /*! \struct Channel
+     *
+     *  \brief Structure used to store data about the channel that compose the 2D/3D stack.
+     *
+     *  Channel is one of the elements that can be used to build a 3d stack
+     */
 
-    /* The heigh of the channel in [um] (1 cell)    */
+    struct Channel
+    {
+        /*! The channel model (4rm - 2rm) */
 
-    CellDimension_t Height ;
+        ChannelModel_t ChannelModel ;
 
-    /* The heat transfert coefficents of the cooling liquid */
-    /* in [ (W / ( um2 * K ) ]                              */
+        /*! The height of the channel in \f$ \mu m \f$ (1 cell) */
 
-    CoolantHTCs_t CoolantHTCs ;
+        CellDimension_t Height ;
 
-    /* The volumetric heat capacity of the cooling liquid  */
-    /* in [ J / ( um3 * K ) ]                              */
+        /*! The length of the channel in \f$ \mu m \f$ */
 
-    CoolantVHC_t CoolantVHC ;
+        ChannelDimension_t Length ;
 
-    /* The temperarute of the incoming liquid in [K]  */
+        /*! The pitch of the channel in \f$ \mu m \f$ */
 
-    Temperature_t CoolantTIn ;
+        ChannelDimension_t Pitch ;
 
-    /* The flow rate per channel layer of the incolimg liquid   */
-    /* Specified in [ ml / min ] but stored in [ um3 / sec ]    */
-    /* Shared by all the channels for each layer in the 3DStack */
+        /*! Porosity */
 
-    CoolantFR_t CoolantFR ;
+        ChannelDimension_t Porosity ;
 
-    /* The material composing the wall */
+        /*!  Number of channels (per cavity) along chip length */
 
-    Material* Wall ;
+        Quantity_t NChannels ;
 
-  } Channel ;
+        /*! The number of layer composing the channel */
 
-/******************************************************************************/
+        CellIndex_t NLayers ;
 
-  void init_channel (Channel* channel) ;
+        /*! The offset (\# layers) of the source layer within the channel */
 
-/******************************************************************************/
+        CellIndex_t SourceLayerOffset ;
 
-  Channel* alloc_and_init_channel (void) ;
+        /*! The properties of the fluid used as coolant */
 
-/******************************************************************************/
+        Coolant_t Coolant ;
 
-  void free_channel (Channel* channel) ;
+        /*! The material composing the wall */
 
-/******************************************************************************/
+        Material *WallMaterial ;
 
-  void print_channel (FILE* stream, String_t prefix, Channel* channel) ;
+    } ;
 
-/******************************************************************************/
+    /*! Definition of the type Channel */
 
-  Bool_t is_channel_column (ColumnIndex_t column) ;
-
-/******************************************************************************/
-
-  Conductances* fill_conductances_channel
-  (
-#   ifdef PRINT_CONDUCTANCES
-    LayerIndex_t  current_layer,
-#   endif
-    Channel*      channel,
-    Conductances* conductances,
-    Dimensions*   dimensions
-  ) ;
+    typedef struct Channel Channel ;
 
 /******************************************************************************/
 
-  Capacity_t* fill_capacities_channel
-  (
-#   ifdef PRINT_CAPACITIES
-    LayerIndex_t current_layer,
-#   endif
-    Channel*     channel,
-    Capacity_t*  capacities,
-    Dimensions*  dimensions,
-    Time_t       delta_time
-  ) ;
 
-/******************************************************************************/
 
-  Source_t* fill_sources_channel
-  (
-#   ifdef PRINT_SOURCES
-    LayerIndex_t current_layer,
-#   endif
-    Channel*     channel,
-    Source_t*    sources,
-    Dimensions*  dimensions
-  ) ;
+    /*! Sets all the fields of \a channel to a default value (zero or \c NULL ).
+     *
+     * \param channel the address of the channel to initialize
+     */
 
-/******************************************************************************/
+    void init_channel (Channel *channel) ;
 
-  Quantity_t fill_system_matrix_channel
-  (
-#   ifdef PRINT_SYSTEM_MATRIX
-    Channel*             channel,
-#   endif
-    Dimensions*          dimensions,
-    Conductances*        conductances,
-    Capacity_t*          capacities,
-    LayerIndex_t         current_layer,
-    ColumnIndex_t*       column_pointers,
-    RowIndex_t*          row_indices,
-    SystemMatrixValue_t* values
-  ) ;
+
+
+    /*! Allocates a channel in memory and sets its fields to their default
+     *  value with #init_channel
+     *
+     * \return the pointer to a new Channel
+     * \return \c NULL if the memory allocation fails
+     */
+
+    Channel *alloc_and_init_channel (void) ;
+
+
+    /*! Frees the memory related to \a channel
+     *
+     * The parametrer \a channel must be a pointer previously obtained with
+     * #alloc_and_init_channel
+     *
+     * \param channel the address of the channel structure to free
+     */
+
+    void free_channel (Channel *channel) ;
+
+
+
+    /*! Prints the channel as it looks in the stack file
+     *
+     * \param stream  the output stream (must be already open)
+     * \param prefix  a string to be printed as prefix at the beginning of each line
+     * \param channel the channel to print
+     * \param dimensions pointer to the structure storing the dimensions
+     */
+
+    void print_formatted_channel
+
+        (FILE *stream, String_t prefix, Channel *channel, Dimensions *dimensions) ;
+
+
+
+    /*! Prints detailed information about all the fields of a channel
+     *
+     * \param stream the output stream (must be already open)
+     * \param prefix a string to be printed as prefix at the beginning of each line
+     * \param channel the channel to print
+     */
+
+    void print_detailed_channel
+
+        (FILE *stream, String_t prefix, Channel *channel) ;
+
+    /*! Fills the thermal cells corresponding to a channel
+     *
+     *  \param thermal_cells pointer to the first thermal cell in the 3d stack
+     *  \param delta_time    the time resolution of the thermal simulation
+     *  \param dimensions    pointer to the structure storing the dimensions
+     *  \param layer_index   offset (\# layers) of the channel within the stack
+     *  \param channel       pointer to the channel
+     */
+
+    void fill_thermal_cell_channel
+    (
+        ThermalCell     *thermal_cells,
+        Time_t           delta_time,
+        Dimensions      *dimensions,
+        CellIndex_t      layer_index,
+        Channel         *channel
+    ) ;
+
+
+
+    /*! Fills the source vector corresponding to a channel
+     *
+     *  \param sources     pointer to the first element in the source vector
+     *  \param dimensions  pointer to the structure storing the dimensions
+     *  \param layer_index offset (\# layers) of the channel within the stack
+     *  \param channel     pointer to the channel
+     */
+
+    void fill_sources_channel
+    (
+        Source_t    *sources,
+        Dimensions  *dimensions,
+        CellIndex_t  layer_index,
+        Channel     *channel
+    ) ;
+
+
+
+    /*! Fills the system matrix
+     *
+     *  \param channel       pointer to the channel
+     *  \param dimensions    pointer to the structure storing the dimensions
+     *  \param thermal_cells pointer to the first thermal cell in the 3d stack
+     *  \param layer_index   offset (\# layers) of the channel within the stack
+     *  \param system_matrix copy of the system matrix structure
+     *
+     *  \return A matrix partially filled (FIXME)
+     */
+
+    SystemMatrix fill_system_matrix_channel
+    (
+        Channel      *channel,
+        Dimensions   *dimensions,
+        ThermalCell  *thermal_cells,
+        CellIndex_t   layer_index,
+        SystemMatrix  system_matrix
+    ) ;
 
 /******************************************************************************/
 

@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
+ *          Giseong Bak                                                       *
  *          Martino Ruggiero                                                  *
  *          Thomas Brunschwiler                                               *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -36,101 +39,210 @@
 #include <stdlib.h>
 
 #include "conventional_heat_sink.h"
+#include "macros.h"
 
 /******************************************************************************/
 
-void init_conventional_heat_sink (ConventionalHeatSink* conventionalheatsink)
+void init_conventional_heat_sink (ConventionalHeatSink *conventional_heat_sink)
 {
-  conventionalheatsink->AmbientHTC = 0.0 ;
-  conventionalheatsink->AmbientTemperature = 0.0 ;
+    conventional_heat_sink->AmbientHTC         = (AmbientHTC_t) 0.0 ;
+    conventional_heat_sink->AmbientTemperature = 0.0 ;
+    conventional_heat_sink->TopLayer           = NULL ;
 }
 
 /******************************************************************************/
 
-ConventionalHeatSink* alloc_and_init_conventional_heat_sink (void)
+ConventionalHeatSink *alloc_and_init_conventional_heat_sink (void)
 {
-  ConventionalHeatSink* conventionalheatsink
+    ConventionalHeatSink *conventional_heat_sink = (ConventionalHeatSink *)
 
-    = (ConventionalHeatSink*) malloc ( sizeof(ConventionalHeatSink) ) ;
+        malloc (sizeof(ConventionalHeatSink)) ;
 
-  if (conventionalheatsink != NULL)
+    if (conventional_heat_sink != NULL)
 
-    init_conventional_heat_sink (conventionalheatsink) ;
+        init_conventional_heat_sink (conventional_heat_sink) ;
 
-  return conventionalheatsink ;
+    return conventional_heat_sink ;
 }
 
 /******************************************************************************/
 
-void free_conventional_heat_sink (ConventionalHeatSink* conventionalheatsink)
+void free_conventional_heat_sink (ConventionalHeatSink *conventional_heat_sink)
 {
-  free (conventionalheatsink) ;
+    FREE_POINTER (free, conventional_heat_sink) ;
 }
 
 /******************************************************************************/
 
-void print_conventional_heat_sink
+void print_formatted_conventional_heat_sink
 (
-  FILE*                 stream,
+  FILE                 *stream,
   String_t              prefix,
-  ConventionalHeatSink* conventionalheatsink
+  ConventionalHeatSink *conventional_heat_sink
 )
 {
-  fprintf(stream, "%sConventional Heat Sink\n", prefix) ;
-  fprintf(stream, "%s  Heat Transfer coefficent %.5e\n",
-                  prefix, conventionalheatsink->AmbientHTC) ;
-  fprintf(stream, "%s  Ambient temperature      %.4e\n",
-                  prefix, conventionalheatsink->AmbientTemperature) ;
+    fprintf (stream,
+        "%sconventional heat sink :\n",
+        prefix) ;
+
+    fprintf (stream,
+        "%s   heat transfer coefficient %.4e ;\n",
+        prefix, conventional_heat_sink->AmbientHTC) ;
+
+    fprintf (stream,
+        "%s   ambient temperature       %.2f ;\n",
+        prefix, conventional_heat_sink->AmbientTemperature) ;
+}
+
+/******************************************************************************/
+
+void print_detailed_conventional_heat_sink
+(
+  FILE                 *stream,
+  String_t              prefix,
+  ConventionalHeatSink *conventional_heat_sink
+)
+{
+    fprintf (stream,
+        "%sconventional_heat_sink      = %p\n",
+        prefix,   conventional_heat_sink) ;
+
+    fprintf (stream,
+        "%s  AmbientHTC                = %.4e\n",
+        prefix,   conventional_heat_sink->AmbientHTC) ;
+
+    fprintf (stream,
+        "%s  AmbientTemperature        = %.2f\n",
+        prefix,   conventional_heat_sink->AmbientTemperature) ;
+
+    fprintf (stream,
+        "%s  TopLayer                  = %p\n",
+        prefix,   conventional_heat_sink->TopLayer) ;
+}
+
+/******************************************************************************/
+
+void fill_thermal_cell_conventional_heat_sink
+(
+    ThermalCell          *thermal_cells,
+    Dimensions           *dimensions,
+    ConventionalHeatSink *conventional_heat_sink
+)
+{
+    CellIndex_t layer_index = LAST_LAYER_INDEX (dimensions) ;
+
+    CellIndex_t cell_index =
+
+        get_cell_offset_in_stack (dimensions, layer_index, 0, 0) ;
+
+    thermal_cells += cell_index ;
+
+    FOR_EVERY_ROW (row_index, dimensions)
+    {
+        FOR_EVERY_COLUMN (column_index, dimensions)
+        {
+
+#ifdef PRINT_THERMAL_CELLS
+            fprintf (stderr,
+                "  l %2d r %4d c %4d [%7d] ",
+                layer_index, row_index, column_index, cell_index++) ;
+#endif
+
+            fill_solid_cell_conventional_heat_sink
+            (
+                thermal_cells,
+
+                get_cell_length (dimensions, column_index),
+                get_cell_width  (dimensions, row_index),
+                conventional_heat_sink->TopLayer->Height,
+
+                conventional_heat_sink->TopLayer->Material->ThermalConductivity,
+                conventional_heat_sink->AmbientHTC
+            ) ;
+
+            thermal_cells++ ;
+
+        } // FOR_EVERY_COLUMN
+    } // FOR_EVERY_ROW
 }
 
 /******************************************************************************/
 
 void fill_sources_conventional_heat_sink
 (
-  ConventionalHeatSink* conventionalheatsink,
-  Dimensions*           dimensions,
-  Source_t*             sources,
-  Conductances*         conductances
+    Source_t             *sources,
+    ThermalCell          *thermal_cells,
+    Dimensions           *dimensions,
+    ConventionalHeatSink *conventional_heat_sink
 )
 {
-  RowIndex_t    row ;
-  ColumnIndex_t column ;
-
-  Quantity_t last_layer = get_number_of_layers(dimensions) - 1 ;
-  Quantity_t first_cell = get_cell_offset_in_stack (dimensions, last_layer, 0, 0) ;
+    CellIndex_t layer_index = LAST_LAYER_INDEX (dimensions) ;
 
 #ifdef PRINT_SOURCES
-  fprintf (stderr,
-    "current_layer = %d\tadd_sources_conventional_heat_sink\n", last_layer) ;
+    fprintf (stderr,
+        "layer_index = %d\tadd_sources_conventional_heat_sink\n",
+        layer_index) ;
 #endif
 
-  conductances += first_cell ;
-  sources      += first_cell ;
+    CellIndex_t cell_index =
 
-  for
-  (
-    row = 0 ;
-    row < get_number_of_rows (dimensions) ;
-    row++
-  )
+        get_cell_offset_in_stack (dimensions, layer_index, 0, 0) ;
 
-    for
-    (
-      column = 0 ;
-      column < get_number_of_columns (dimensions) ;
-      column++ ,
-      sources++ ,
-      conductances++
-    )
+    thermal_cells += cell_index ;
+    sources       += cell_index ;
+
+    FOR_EVERY_ROW (row_index, dimensions)
     {
-      *sources = (conventionalheatsink->AmbientTemperature * conductances->Top) ;
+        FOR_EVERY_COLUMN (column_index, dimensions)
+        {
+            *sources = conventional_heat_sink->AmbientTemperature
+                       * thermal_cells->Top ;
+
 #ifdef PRINT_SOURCES
-        fprintf (stderr,
-          "solid  cell  |  l %2d r %4d c %4d [%6d] | = %f * %.5e = %.5e\n",
-          last_layer, row, column,
-          get_cell_offset_in_stack (dimensions, last_layer, row, column),
-          conventionalheatsink->AmbientTemperature, conductances->Top, *sources);
+            fprintf (stderr,
+                "solid  cell  |  l %2d r %4d c %4d [%7d] | = %f * %.5e = %.5e\n",
+                layer_index, row_index, column_index, cell_index++,
+                conventional_heat_sink->AmbientTemperature,
+                thermal_cells->Top, *sources) ;
 #endif
+
+            sources++ ;
+            thermal_cells ++ ;
+
+        } // FOR_EVERY_COLUMN
+    } // FOR_EVERY_ROW
+}
+
+/******************************************************************************/
+
+void fill_system_matrix_conventional_heat_sink
+(
+    SystemMatrix  system_matrix,
+    Dimensions   *dimensions,
+    ThermalCell  *thermal_cells
+)
+{
+    CellIndex_t ncells = get_number_of_cells(dimensions) ;
+
+    CellIndex_t cell_index = get_cell_offset_in_stack
+
+        (dimensions, LAST_LAYER_INDEX(dimensions), 0 ,0) ;
+
+    thermal_cells += cell_index ;
+
+    while (cell_index < ncells)
+    {
+        CellIndex_t row_index ;
+
+        for (row_index = system_matrix.ColumnPointers [ cell_index ] ;
+             row_index < (CellIndex_t) system_matrix.ColumnPointers [ cell_index + 1 ] ;
+             row_index ++)
+
+            if ( (CellIndex_t) system_matrix.RowIndices [ row_index ] == cell_index )
+
+                system_matrix.Values [ row_index ] += thermal_cells++->Top ;
+
+        cell_index++ ;
     }
 }
 

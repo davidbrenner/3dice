@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 1.0.3 .                               *
+ * This file is part of 3D-ICE, version 2.0 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -20,12 +20,15 @@
  *                                                                            *
  * Authors: Arvind Sridhar                                                    *
  *          Alessandro Vincenzi                                               *
+ *          Giseong Bak                                                       *
  *          Martino Ruggiero                                                  *
  *          Thomas Brunschwiler                                               *
  *          David Atienza                                                     *
  *                                                                            *
  * For any comment, suggestion or request  about 3D-ICE, please  register and *
  * write to the mailing list (see http://listes.epfl.ch/doc.cgi?liste=3d-ice) *
+ * Any usage  of 3D-ICE  for research,  commercial or other  purposes must be *
+ * properly acknowledged in the resulting products or publications.           *
  *                                                                            *
  * EPFL-STI-IEL-ESL                                                           *
  * Batiment ELG, ELG 130                Mail : 3d-ice@listes.epfl.ch          *
@@ -33,49 +36,52 @@
  * 1015 Lausanne, Switzerland           Url  : http://esl.epfl.ch/3d-ice.html *
  ******************************************************************************/
 
-%{
-#include "dimensions.h"
-#include "floorplan.h"
-#include "floorplan_element.h"
-%}
+%code requires
+{
+    #include "types.h"
+    #include "floorplan_element.h"
+    #include "powers_queue.h"
+}
 
 %union
 {
-  double                   d_value ;
-  char                     *string ;
-
-  FloorplanElement  *p_floorplan_element ;
-  PowersQueue       *p_powers_queue ;
+    Power_t           power_value ;
+    String_t          identifier ;
+    FloorplanElement *p_floorplan_element ;
+    PowersQueue      *p_powers_queue ;
 }
 
-%{
-#include "../flex/floorplan_scanner.h"
+%code
+{
+    #include "dimensions.h"
+    #include "floorplan.h"
+    #include "macros.h"
 
-void floorplan_error
-(
-  Floorplan*  floorplan,
-  Dimensions* dimensions,
-  yyscan_t    yyscanner,
-  char const* msg
-) ;
+    #include "../flex/floorplan_scanner.h"
 
-static int first_length_found = 0 ;
-%}
+    void floorplan_error
+
+        (Floorplan *floorplan, Dimensions *dimensions,
+         yyscan_t yyscanner, String_t msg) ;
+
+    static char error_message [100] ;
+
+    static bool local_abort ;
+}
 
 %type <p_floorplan_element> floorplan_element ;
 %type <p_floorplan_element> floorplan_element_list ;
 %type <p_powers_queue>      power_values_list ;
 
-%destructor { free($$) ; } <string>
+%destructor { FREE_POINTER (free, $$) ; } <identifier>
 
 %token POSITION   "keyword position"
 %token DIMENSION  "keyword dimension"
 %token POWER      "keyword power"
 %token VALUES     "keyword values"
 
-//%token <i_value> UIVALUE       "integer value"
-%token <d_value> DVALUE        "double value"
-%token <string>  IDENTIFIER    "identifier"
+%token <power_value> DVALUE     "double value"
+%token <identifier>  IDENTIFIER "identifier"
 
 %name-prefix "floorplan_"
 %output      "floorplan_parser.c"
@@ -90,141 +96,173 @@ static int first_length_found = 0 ;
 
 %lex-param   { yyscan_t scanner       }
 
-%start floorplan_element_list
+%initial-action
+{
+    local_abort = false ;
+} ;
+
+%start floorplan_file
 
 %%
 
-floorplan_element_list
+floorplan_file
 
-  : floorplan_element
+  : floorplan_element_list
     {
-      Bool_t tmp_1 = check_location (floorplan, $1, dimensions) ;
-      Bool_t tmp_2 = align_to_grid  (floorplan, $1, dimensions) ;
-
-      if (tmp_1 || tmp_2)
-      {
-        free_floorplan_element ($1) ;
-        floorplan_error (floorplan, dimensions, scanner, "") ;
-        YYABORT ;
-      }
-
-      floorplan->ElementsList = $1 ;
-      floorplan->NElements    = 1 ;
-      $$ = $1 ;
-    }
-  | floorplan_element_list floorplan_element
-    {
-      if (find_floorplan_element_in_list($1, $2->Id) != NULL)
-      {
-        String_t message
-          = (String_t) malloc ((37 + strlen($2->Id)) * sizeof (char)) ;
-        sprintf (message, "Floorplan element %s already declared", $2->Id) ;
-
-        floorplan_error (floorplan, dimensions, scanner, message) ;
-        free_floorplan_element ($2) ;
-        free (message) ;
-        YYABORT ;
-      }
-
-
-      Bool_t tmp_1 = check_intersections (floorplan, $2) ;
-      Bool_t tmp_2 = check_location      (floorplan, $2, dimensions) ;
-      Bool_t tmp_3 = align_to_grid       (floorplan, $2, dimensions) ;
-
-      if (tmp_1 || tmp_2 || tmp_3 )
-      {
-        free_floorplan_element ($2) ;
-        floorplan_error (floorplan, dimensions, scanner, "") ;
-        YYABORT ;
-      }
-
-      $1->Next = $2 ;
-      floorplan->NElements++ ;
-      $$ = $2 ;
-    }
-  ;
-
-floorplan_element
-
-  : IDENTIFIER ':'
-      POSITION  DVALUE ',' DVALUE ';'
-      DIMENSION DVALUE ',' DVALUE ';'
-      POWER VALUES power_values_list ';'
-    {
-      FloorplanElement *floorplan_element
-        = $$ = alloc_and_init_floorplan_element ( ) ;
-
-      if (floorplan_element == NULL)
-      {
-        perror ("alloc_floorplan_element") ;
-        floorplan_error (floorplan, dimensions, scanner, "") ;
-        YYABORT ;
-      }
-
-      floorplan_element->Id          = $1  ;
-      floorplan_element->SW_X        = $4  ;
-      floorplan_element->SW_Y        = $6  ;
-      floorplan_element->Length      = $9  ;
-      floorplan_element->Width       = $11 ;
-      floorplan_element->PowerValues = $15 ;
-
-      if (first_length_found == 0)
-        first_length_found = $15->Length ;
-      else
-        if ($15->Length < first_length_found)
+        if (local_abort == true)
         {
-          floorplan_error (floorplan, dimensions, scanner, "Missing power value!") ;
-          YYABORT ;
+            FREE_POINTER (free_floorplan, floorplan) ;
+
+            YYABORT ;
         }
     }
   ;
 
+/******************************************************************************/
+/************************* List of floorplan elements *************************/
+/******************************************************************************/
+
+floorplan_element_list
+
+  : floorplan_element             // $1 : pointer to the first floorplan element found
+    {
+        if (check_location (dimensions, $1) == true)
+        {
+            sprintf (error_message, "Floorplan element %s is outside of the IC", $1->Id) ;
+
+            floorplan_error (floorplan, dimensions, scanner, error_message) ;
+
+            local_abort = true ;
+        }
+
+        align_to_grid  (dimensions, $1) ;
+
+        floorplan->ElementsList = $1 ;
+        floorplan->NElements    = 1 ;
+
+        $$ = $1 ;                 // $1 will be the new last element in the list
+    }
+  | floorplan_element_list floorplan_element // $1 : pointer to the last element in the list
+                                             // $2 : pointer to the element to add in the list
+    {
+        if (find_floorplan_element_in_list(floorplan->ElementsList, $2->Id) != NULL)
+        {
+            sprintf (error_message, "Floorplan element %s already declared", $2->Id) ;
+
+            floorplan_error (floorplan, dimensions, scanner, error_message) ;
+
+            local_abort = true ;
+        }
+
+        if (check_location (dimensions, $2) == true)
+        {
+            sprintf (error_message, "Floorplan element %s is outside of the IC", $2->Id) ;
+
+            floorplan_error (floorplan, dimensions, scanner, error_message) ;
+
+            local_abort = true ;
+        }
+
+        FloorplanElement *flp_el = floorplan->ElementsList ;
+
+        do
+        {
+            flp_el = find_intersection_in_list (flp_el, $2) ;
+
+            if (flp_el != NULL)
+            {
+                sprintf (error_message, "Found intersection between %s and %s", $2->Id, flp_el->Id) ;
+
+                floorplan_error (floorplan, dimensions, scanner, error_message) ;
+
+                flp_el = flp_el->Next ;
+
+                local_abort = true ;
+            }
+
+        }   while (flp_el != NULL) ;
+
+        align_to_grid (dimensions, $2) ;
+
+        floorplan->NElements++ ;
+
+        $1->Next = $2 ;           // insert $2 at the end of the list
+        $$ = $2 ;                 // $2 will be the new last element in the list
+    }
+  ;
+
+/******************************************************************************/
+/************************* Floorplan element **********************************/
+/******************************************************************************/
+
+floorplan_element
+
+  : IDENTIFIER ':'                             // $1
+      POSITION  DVALUE ',' DVALUE ';'          // $4 $6
+      DIMENSION DVALUE ',' DVALUE ';'          // $9 $11
+      POWER VALUES power_values_list ';'       // $15
+    {
+        FloorplanElement *floorplan_element = $$ = alloc_and_init_floorplan_element ( ) ;
+
+        if (floorplan_element == NULL)
+        {
+            FREE_POINTER (free, $1) ;
+
+            floorplan_error (floorplan, dimensions, scanner, "Malloc floorplan element failed") ;
+
+            YYABORT ;
+        }
+
+        floorplan_element->Id          = $1 ;
+        floorplan_element->SW_X        = $4 ;
+        floorplan_element->SW_Y        = $6 ;
+        floorplan_element->Length      = $9 ;
+        floorplan_element->Width       = $11 ;
+        floorplan_element->PowerValues = $15 ;
+
+    }
+  ;
+
+/******************************************************************************/
+/************************* List of power values *******************************/
+/******************************************************************************/
+
 power_values_list
 
-  : DVALUE
+  : DVALUE              // $1
+                        // There must be at least one power value
     {
-      PowersQueue* powers_list = $$ = alloc_and_init_powers_queue() ;
+        PowersQueue* powers_list = $$ = alloc_and_init_powers_queue() ;
 
-      if (powers_list == NULL)
-      {
-        perror ("alloc_powers_queue") ;
-        floorplan_error (floorplan, dimensions, scanner, "") ;
-        YYABORT ;
-      }
+        if (powers_list == NULL)
+        {
+            floorplan_error (floorplan, dimensions, scanner, "Malloc power list failed") ;
 
-      put_into_powers_queue (powers_list, $1) ;
+            YYABORT ;
+        }
+
+        put_into_powers_queue (powers_list, $1) ;
     }
 
-  | power_values_list ',' DVALUE
+  | power_values_list ',' DVALUE         // $1 the power list so far ...
+                                         // $3 the poer value to add
     {
-      if (first_length_found != 0
-          && $1->Length + 1 > first_length_found)
-
-        fprintf (stderr, "%s:%d: Warning: discarding value %f\n",
-                 floorplan->FileName, floorplan_get_lineno(scanner), $3);
-
-      else
-
         put_into_powers_queue ($1, $3) ;
 
-      $$ = $1 ;
+        $$ = $1 ;
     }
   ;
 
 %%
 
-void
-floorplan_error
+void floorplan_error
 (
-  Floorplan  *floorplan,
-  Dimensions* dimensions,
-  yyscan_t   yyscanner,
-  char const *msg
+    Floorplan  *floorplan,
+    Dimensions *__attribute__ ((unused)) dimensions,
+    yyscan_t    yyscanner,
+    String_t    msg
 )
 {
-  fprintf (stderr, "%s:%d: %s\n", floorplan->FileName,
-                                  floorplan_get_lineno(yyscanner),
-                                  msg) ;
-
-  get_chip_length (dimensions) ;  // FIXME
+    fprintf (stderr, "%s:%d: %s\n",
+             floorplan->FileName, floorplan_get_lineno(yyscanner), msg) ;
 }
