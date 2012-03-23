@@ -98,7 +98,7 @@ s_integer [+-]?[[:digit:]]+
 exponent  [eE]{s_integer}
 double    {s_integer}\.{u_integer}{exponent}?
 
-identifier     [[:alpha:]](\_|[[:alnum:]])*
+identifier     [-[:alpha:]](\_|[[:alnum:]])*
 
 /* exclusive start conditions to exclude C/C++ like comments in */
 /* the scanned file.                                            */

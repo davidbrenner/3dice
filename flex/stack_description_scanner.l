@@ -97,7 +97,7 @@ unsigned_integer        [[:digit:]]+
 signed_integer          [+-]?[[:digit:]]+
 exponent                [eE]{signed_integer}
 double                  {signed_integer}(\.{unsigned_integer}{exponent}?)?
-identifier              [[:alpha:]](\_|[[:alnum:]])*
+identifier              [-[:alpha:]](\_|[[:alnum:]])*
 path_begin              (\.{1,2}\/|\/)?
 path                    \"{path_begin}{identifier}(\/|\.{1,2}|{identifier})*\"
 
