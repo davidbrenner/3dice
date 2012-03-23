@@ -1,0 +1,10 @@
+bison/*.h
+bison/*.c
+flex/*.h
+flex/*.c
+*.d
+*.o
+bin/3D-ICE-Client
+bin/3D-ICE-Server
+bin/3D-ICE-Emulator
+lib/libthreed-ice-2.1.a
