@@ -50,6 +50,7 @@
 3DICE_SOURCES   = $(3DICE_MAIN)/sources
 3DICE_LIB       = $(3DICE_MAIN)/lib
 3DICE_BIN       = $(3DICE_MAIN)/bin
+3DICE_SWIG      = $(3DICE_MAIN)/swig
 3DICE_DOC       = $(3DICE_MAIN)/doc
 3DICE_TEST      = $(3DICE_MAIN)/test
 
@@ -104,6 +105,9 @@ SLU_INCLUDE = $(SLU_MAIN)/SRC
 SLU_LIB     = $(SLU_MAIN)/lib
 SLU_LIBS   = -L$(SLU_LIB) -lsuperlu_$(SLU_VERSION) -lblas
 #SLU_LIBS    = -L$(SLU_LIB) -lsuperlu_$(SLU_VERSION) -L/usr/lib -lblas
+SLU_INCLUDE = /usr/include/superlu
+SLU_LIB = /usr/lib
+SLU_LIBS = -L$(SLU_LIB) -lsuperlu -lblas
 
  #
  # Commands and flags

@@ -42,7 +42,7 @@ include $(3DICE_MAIN)/makefile.def
 
 .PHONY: all lib bin test doc clean
 
-all: lib bin
+all: lib bin swig
 
 lib:
 	cd $(3DICE_FLEX)    ; make ;
@@ -52,6 +52,9 @@ lib:
 
 bin: lib
 	cd $(3DICE_BIN) ; make ;
+	
+swig: lib
+	cd $(3DICE_SWIG) ; make ;
 
 test: lib bin
 	cd $(3DICE_TEST) ; make ;
@@ -65,6 +68,7 @@ clean:
 	cd $(3DICE_SOURCES) ; make clean ;
 	cd $(3DICE_LIB)     ; make clean ;
 	cd $(3DICE_BIN)     ; make clean ;
+	cd $(3DICE_SWIG)    ; make clean ;
 	cd $(3DICE_TEST)    ; make clean ;
 	cd $(3DICE_DOC)     ; make clean ;
 
