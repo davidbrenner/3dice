@@ -1,5 +1,5 @@
  ##############################################################################
- # This file is part of 3D-ICE, version 2.0 .                                 #
+ # This file is part of 3D-ICE, version 2.1 .                                 #
  #                                                                            #
  # 3D-ICE is free software: you can  redistribute it and/or  modify it  under #
  # the terms of the  GNU General  Public  License as  published by  the  Free #
@@ -40,7 +40,9 @@
 
 include $(3DICE_MAIN)/makefile.def
 
-all: 3D-ICE-Emulator
+all: 3D-ICE-Emulator 3D-ICE-Client 3D-ICE-Server
+
+CFLAGS := $(CFLAGS) -Wall -Wextra -Werror
 
 CINCLUDES := $(CINCLUDES) -I$(SLU_INCLUDE)
 CLIBS = $(3DICE_LIB_A) $(SLU_LIBS) -lm
@@ -50,8 +52,24 @@ CLIBS = $(3DICE_LIB_A) $(SLU_LIBS) -lm
 3D-ICE-Emulator: 3D-ICE-Emulator.o $(3DICE_LIB_A)
 	$(CC) $< $(CLIBS) -o $@
 
+-include 3D-ICE-Client.d
+
+3D-ICE-Client: 3D-ICE-Client.o $(3DICE_LIB_A)
+	$(CC) $< $(CLIBS) -o $@
+
+-include 3D-ICE-Server.d
+
+3D-ICE-Server: 3D-ICE-Server.o $(3DICE_LIB_A)
+	$(CC) $< $(CLIBS) -o $@
+
 clean:
 	@$(RM) $(RMFLAGS) 3D-ICE-Emulator
 	@$(RM) $(RMFLAGS) 3D-ICE-Emulator.o
 	@$(RM) $(RMFLAGS) 3D-ICE-Emulator.d
+	@$(RM) $(RMFLAGS) 3D-ICE-Client
+	@$(RM) $(RMFLAGS) 3D-ICE-Client.o
+	@$(RM) $(RMFLAGS) 3D-ICE-Client.d
+	@$(RM) $(RMFLAGS) 3D-ICE-Server
+	@$(RM) $(RMFLAGS) 3D-ICE-Server.o
+	@$(RM) $(RMFLAGS) 3D-ICE-Server.d
 

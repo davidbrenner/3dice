@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 2.0 .                                 *
+ * This file is part of 3D-ICE, version 2.1 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -46,8 +46,9 @@ extern "C"
 {
 #endif
 
-#include "stdint.h"
-#include "stdbool.h"
+#include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
 
 /******************************************************************************/
 
@@ -448,7 +449,8 @@ extern "C"
         TDICE_OUTPUT_TYPE_TCELL,      //!< Single thermal cell
         TDICE_OUTPUT_TYPE_TFLP,       //!< All the element in a floorplan
         TDICE_OUTPUT_TYPE_TFLPEL,     //!< A single floorplan element
-        TDICE_OUTPUT_TYPE_TMAP        //!< The thermal map of a stack element
+        TDICE_OUTPUT_TYPE_TMAP,       //!< The thermal map of a stack element
+        TDICE_OUTPUT_TYPE_TCOOLANT    //!< The coolant leaving the cavity
     } ;
 
 
@@ -468,9 +470,9 @@ extern "C"
     enum OutputInstant_t
     {
         TDICE_OUTPUT_INSTANT_NONE = 0,  //!< Undefined instant
-        TDICE_OUTPUT_FINAL,             //!< At the end of the simulation
-        TDICE_OUTPUT_SLOT,              //!< At the end of each time slot
-        TDICE_OUTPUT_STEP               //!< At every internal time step
+        TDICE_OUTPUT_INSTANT_FINAL,     //!< At the end of the simulation
+        TDICE_OUTPUT_INSTANT_SLOT,      //!< At the end of each time slot
+        TDICE_OUTPUT_INSTANT_STEP       //!< At every internal time step
     } ;
 
 
@@ -478,6 +480,110 @@ extern "C"
     /*! Definition of the type OutputInstant_t */
 
     typedef enum OutputInstant_t OutputInstant_t ;
+
+/******************************************************************************/
+
+    /*! Definition of the type NetworkSocket_t */
+
+    typedef int NetworkSocket_t ;
+
+
+
+    /*! Definition of the type PortNumber_t */
+
+    typedef uint16_t PortNumber_t ;
+
+
+
+    /*! \enum MessageType_t
+     *
+     * Enumeration to collect all the types of messages that the client
+     * can send as a request to the server
+     */
+
+    enum MessageType_t
+    {
+        /*! \brief Forces the server to terminate.
+         *
+         * The client sends a message without payload :
+         *
+         * | 2 | TDICE_EXIT_SIMULATION |
+         *
+         * The server terminates without a reply
+         */
+
+        TDICE_EXIT_SIMULATION = 0,
+
+        /*! \brief Reset thermal state to initial temperature
+         *
+         * The client sends a message without payload :
+         *
+         * | 2 | TDICE_RESET_THERMAL_STATE |
+         *
+         * The client sends a message without payload
+         * The server resets the thermal state and does not reply
+         */
+
+        TDICE_RESET_THERMAL_STATE,
+
+        /*! \brief Request thermal results at a specific instant
+         *
+         * The client sends a message with the following payload
+         *
+         * | 4 | TDICE_RESET_THERMAL_STATE | OutputInstant_t instant | OutputType_t type |
+         *
+         * The server will process all the inspection point matching the parameters and
+         * will send back the following message
+         *
+         * | length | TDICE_RESET_THERMAL_STATE | n_matching_inspection_points | ip 0 | ... | ip n-1 |
+         *
+         * The message will contain at word 0 the number of inspection points matching the
+         * request. The remaining payloas will contain temperatures according to the type of
+         * inspection point.
+         */
+
+        TDICE_THERMAL_RESULTS,
+
+        /*! \brief Request for the total number of florplan elements in the stack
+         *
+         * The client sends a message without payload :
+         *
+         * | 2 | TDICE_TOTAL_NUMBER_OF_FLOORPLAN_ELEMENTS |
+         *
+         * The server will send back the number n of floorplan elements in the stack
+         *
+         * | 3 | TDICE_TOTAL_NUMBER_OF_FLOORPLAN_ELEMENTS | n |
+         */
+
+        TDICE_TOTAL_NUMBER_OF_FLOORPLAN_ELEMENTS,
+
+        /*! \brief Insert a slot of power values into the queues and simulate the slot
+         *
+         * The client sends a message with the following payload
+         *
+         * | n + 3 | TDICE_INSERT_POWERS_AND_SIMULATE_SLOT | n | power0 | ... | power n-1 |
+         *
+         * where n is the total number of floorplan elements in the stack. The server
+         * will use the power values to simulate a slot and it will reply sending back the
+         * state after the simulation:
+         *
+         * | 3 | TDICE_INSERT_POWERS_AND_SIMULATE_SLOT | SimResult_t |
+         */
+
+        TDICE_INSERT_POWERS_AND_SIMULATE_SLOT
+    } ;
+
+
+
+    /*! Definition of the type MessageType_t */
+
+    typedef enum MessageType_t MessageType_t ;
+
+
+
+    /*! Definition of the type MessageWord_t */
+
+    typedef uint32_t MessageWord_t ;
 
 /******************************************************************************/
 

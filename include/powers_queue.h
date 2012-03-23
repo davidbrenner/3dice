@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 2.0 .                                 *
+ * This file is part of 3D-ICE, version 2.1 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -105,7 +105,7 @@ extern "C"
 
     /*! Sets all the fields of \a powers_queue to a default value (zero or \c NULL ).
      *
-     * \param powers_queue the address of the material to initialize
+     * \param powers_queue the address of the power queue to initialize
      */
 
     void init_powers_queue (PowersQueue *powers_queue) ;

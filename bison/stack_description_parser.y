@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 2.0 .                                 *
+ * This file is part of 3D-ICE, version 2.1 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -161,6 +161,7 @@
 %token STEADY                "keyword steady"
 %token STEP                  "keyword step"
 %token TCELL                 "keyword T"
+%token TCOOLANT              "keyword Tcoolant"
 %token TEMPERATURE           "keyword temperature"
 %token TFLP                  "keyword Tflp"
 %token TFLPEL                "keyword Tflpel"
@@ -1440,7 +1441,7 @@ inspection_point
             FREE_POINTER (free, $3) ;
             FREE_POINTER (free, $5) ;
 
-            stack_description_error (stkd, analysis, scanner, "Malloc inspection point out command failed") ;
+            stack_description_error (stkd, analysis, scanner, "Malloc inspection point command failed") ;
 
             YYABORT ;
         }
@@ -1449,6 +1450,77 @@ inspection_point
         inspection_point->Instant      = $6 ;
         inspection_point->FileName     = $5 ;
         inspection_point->StackElement = stack_element ;
+
+        FREE_POINTER (free, $3) ;
+     }
+
+  |  TCOOLANT '(' IDENTIFIER ',' PATH ',' maxminavg when ')' ';'
+
+     // $3 Identifier of the stack element (must be a channel)
+     // $5 Path of the output file
+     // $7 temperature type
+     // $8 when to generate output for this observation
+
+     {
+        StackElement *stack_element =
+
+            find_stack_element_in_list (stkd->BottomStackElement, $3) ;
+
+        if (stack_element == NULL)
+        {
+            sprintf (error_message, "Unknown stack element %s", $3) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+
+            YYABORT ;
+        }
+
+        if (stack_element->Type != TDICE_STACK_ELEMENT_CHANNEL)
+        {
+            sprintf (error_message, "The stack element %s must be a channel", $3) ;
+
+            stack_description_error (stkd, analysis, scanner, error_message) ;
+
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+
+            YYABORT ;
+        }
+
+        InspectionPoint *inspection_point = $$ = alloc_and_init_inspection_point () ;
+
+        if (inspection_point == NULL)
+        {
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc inspection point command failed") ;
+
+            YYABORT ;
+        }
+
+        Tcoolant *tcoolant = alloc_and_init_tcoolant () ;
+
+        if (tcoolant == NULL)
+        {
+            FREE_POINTER (free, $3) ;
+            FREE_POINTER (free, $5) ;
+
+            stack_description_error (stkd, analysis, scanner, "Malloc tcoolant failed") ;
+
+            YYABORT ;
+        }
+
+        tcoolant->Quantity = $7 ;
+
+        inspection_point->Type             = TDICE_OUTPUT_TYPE_TCOOLANT ;
+        inspection_point->Instant          = $8 ;
+        inspection_point->FileName         = $5 ;
+        inspection_point->Pointer.Tcoolant = tcoolant ;
+        inspection_point->StackElement     = stack_element ;
 
         FREE_POINTER (free, $3) ;
      }
@@ -1465,10 +1537,10 @@ maxminavg
 when
 
   :  // Declaring the instance option is not mandatory (final is assumed)
-                { $$ =  TDICE_OUTPUT_FINAL ; }
-  |  ',' STEP   { $$ =  TDICE_OUTPUT_STEP ;  }
-  |  ',' SLOT   { $$ =  TDICE_OUTPUT_SLOT ;  }
-  |  ',' FINAL  { $$ =  TDICE_OUTPUT_FINAL ; }
+                { $$ =  TDICE_OUTPUT_INSTANT_FINAL ; }
+  |  ',' STEP   { $$ =  TDICE_OUTPUT_INSTANT_STEP ;  }
+  |  ',' SLOT   { $$ =  TDICE_OUTPUT_INSTANT_SLOT ;  }
+  |  ',' FINAL  { $$ =  TDICE_OUTPUT_INSTANT_FINAL ; }
   ;
 
 %%

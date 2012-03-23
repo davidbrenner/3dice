@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 2.0 .                                 *
+ * This file is part of 3D-ICE, version 2.1 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -40,6 +40,7 @@
 {
     #include "types.h"
     #include "floorplan_element.h"
+    #include "ic_element.h"
     #include "powers_queue.h"
 }
 
@@ -47,6 +48,7 @@
 {
     Power_t           power_value ;
     String_t          identifier ;
+    ICElement        *p_icelement ;
     FloorplanElement *p_floorplan_element ;
     PowersQueue      *p_powers_queue ;
 }
@@ -64,20 +66,29 @@
         (Floorplan *floorplan, Dimensions *dimensions,
          yyscan_t yyscanner, String_t msg) ;
 
-    static char error_message [100] ;
+    static char error_message [250] ;
+
+    static Quantity_t nicelements ;
 
     static bool local_abort ;
 }
 
 %type <p_floorplan_element> floorplan_element ;
 %type <p_floorplan_element> floorplan_element_list ;
+%type <p_powers_queue>      optional_power_values_list ;
 %type <p_powers_queue>      power_values_list ;
+%type <p_icelement>         ic_elements_list ;
+%type <p_icelement>         ic_elements ;
+%type <p_icelement>         ic_element ;
 
-%destructor { FREE_POINTER (free, $$) ; } <identifier>
+%destructor { FREE_POINTER (free,                  $$) ; } <identifier>
+%destructor { FREE_POINTER (free_ic_elements_list, $$) ; } <p_icelement>
+%destructor { FREE_POINTER (free_powers_queue,     $$) ; } <p_powers_queue>
 
-%token POSITION   "keyword position"
 %token DIMENSION  "keyword dimension"
+%token POSITION   "keyword position"
 %token POWER      "keyword power"
+%token RECTANGLE  "keywork rectangle"
 %token VALUES     "keyword values"
 
 %token <power_value> DVALUE     "double value"
@@ -98,7 +109,8 @@
 
 %initial-action
 {
-    local_abort = false ;
+    nicelements    = 0u ;
+    local_abort    = false ;
 } ;
 
 %start floorplan_file
@@ -126,17 +138,6 @@ floorplan_element_list
 
   : floorplan_element             // $1 : pointer to the first floorplan element found
     {
-        if (check_location (dimensions, $1) == true)
-        {
-            sprintf (error_message, "Floorplan element %s is outside of the IC", $1->Id) ;
-
-            floorplan_error (floorplan, dimensions, scanner, error_message) ;
-
-            local_abort = true ;
-        }
-
-        align_to_grid  (dimensions, $1) ;
-
         floorplan->ElementsList = $1 ;
         floorplan->NElements    = 1 ;
 
@@ -147,42 +148,12 @@ floorplan_element_list
     {
         if (find_floorplan_element_in_list(floorplan->ElementsList, $2->Id) != NULL)
         {
-            sprintf (error_message, "Floorplan element %s already declared", $2->Id) ;
+            sprintf (error_message, "Floorplan element id %s already declared", $2->Id) ;
 
             floorplan_error (floorplan, dimensions, scanner, error_message) ;
 
             local_abort = true ;
         }
-
-        if (check_location (dimensions, $2) == true)
-        {
-            sprintf (error_message, "Floorplan element %s is outside of the IC", $2->Id) ;
-
-            floorplan_error (floorplan, dimensions, scanner, error_message) ;
-
-            local_abort = true ;
-        }
-
-        FloorplanElement *flp_el = floorplan->ElementsList ;
-
-        do
-        {
-            flp_el = find_intersection_in_list (flp_el, $2) ;
-
-            if (flp_el != NULL)
-            {
-                sprintf (error_message, "Found intersection between %s and %s", $2->Id, flp_el->Id) ;
-
-                floorplan_error (floorplan, dimensions, scanner, error_message) ;
-
-                flp_el = flp_el->Next ;
-
-                local_abort = true ;
-            }
-
-        }   while (flp_el != NULL) ;
-
-        align_to_grid (dimensions, $2) ;
 
         floorplan->NElements++ ;
 
@@ -197,10 +168,9 @@ floorplan_element_list
 
 floorplan_element
 
-  : IDENTIFIER ':'                             // $1
-      POSITION  DVALUE ',' DVALUE ';'          // $4 $6
-      DIMENSION DVALUE ',' DVALUE ';'          // $9 $11
-      POWER VALUES power_values_list ';'       // $15
+  : IDENTIFIER ':'                        // $1
+      ic_elements                         // $3
+      optional_power_values_list          // $4
     {
         FloorplanElement *floorplan_element = $$ = alloc_and_init_floorplan_element ( ) ;
 
@@ -213,13 +183,151 @@ floorplan_element
             YYABORT ;
         }
 
-        floorplan_element->Id          = $1 ;
-        floorplan_element->SW_X        = $4 ;
-        floorplan_element->SW_Y        = $6 ;
-        floorplan_element->Length      = $9 ;
-        floorplan_element->Width       = $11 ;
-        floorplan_element->PowerValues = $15 ;
+        floorplan_element->Id             = $1 ;
+        floorplan_element->NICElements    = nicelements ;
+        floorplan_element->ICElementsList = $3 ;
+        floorplan_element->PowerValues    = $4 ;
 
+        FOR_EVERY_ELEMENT_IN_LIST_NEXT (ICElement, ic_el_1, $3)
+        {
+            floorplan_element->EffectiveSurface
+
+                += ic_el_1->EffectiveLength * ic_el_1->EffectiveWidth ;
+
+            FOR_EVERY_ELEMENT_IN_LIST_NEXT (ICElement, ic_el_2, $3)
+            {
+                if (check_intersection (ic_el_1, ic_el_2) == true)
+                {
+                    sprintf (error_message,
+                        "Intersection between %s (%.1f, %.1f, %.1f, %.1f)" \
+                                        " and %s (%.1f, %.1f, %.1f, %.1f)\n",
+                        $1,
+                        ic_el_1->SW_X, ic_el_1->SW_Y, ic_el_1->Length, ic_el_1->Width,
+                        $1,
+                        ic_el_2->SW_X, ic_el_2->SW_Y, ic_el_2->Length, ic_el_2->Width) ;
+
+                    floorplan_error (floorplan, dimensions, scanner, error_message) ;
+
+                    local_abort = true ;
+                }
+            }
+
+            FOR_EVERY_ELEMENT_IN_LIST_NEXT (FloorplanElement, flp_el, floorplan->ElementsList)
+            {
+                FOR_EVERY_ELEMENT_IN_LIST_NEXT (ICElement, ic_el_3, flp_el->ICElementsList)
+                {
+                    if (check_intersection (ic_el_1, ic_el_3) == true)
+                    {
+                        sprintf (error_message,
+                            "Intersection between %s (%.1f, %.1f, %.1f, %.1f)" \
+                                            " and %s (%.1f, %.1f, %.1f, %.1f)\n",
+                            $1,
+                            ic_el_1->SW_X, ic_el_1->SW_Y, ic_el_1->Length, ic_el_1->Width,
+                            flp_el->Id,
+                            ic_el_3->SW_X, ic_el_3->SW_Y, ic_el_3->Length, ic_el_3->Width) ;
+
+                        floorplan_error (floorplan, dimensions, scanner, error_message) ;
+
+                        local_abort = true ;
+                    }
+                }
+            }
+        }
+
+        nicelements = 0u ;
+    }
+  ;
+
+ic_elements
+
+  : POSITION  DVALUE ',' DVALUE ';'  // $2 $4
+    DIMENSION DVALUE ',' DVALUE ';'  // $7 $9
+    {
+        ICElement *icelement = alloc_and_init_ic_element () ;
+
+        if (icelement == NULL)
+        {
+            floorplan_error (floorplan, dimensions, scanner, "Malloc ic element failed") ;
+
+            YYABORT ;
+        }
+
+        icelement->SW_X   = $2 ;
+        icelement->SW_Y   = $4 ;
+        icelement->Length = $7 ;
+        icelement->Width  = $9 ;
+
+        align_to_grid (dimensions, icelement) ;
+
+        if (check_location (dimensions, icelement) == true)
+        {
+            sprintf (error_message, "Floorplan element is outside of the IC") ;
+
+            floorplan_error (floorplan, dimensions, scanner, error_message) ;
+
+            local_abort = true ;
+        }
+
+        nicelements    = 1u ;
+        $$             = icelement ;
+    }
+
+  | ic_elements_list
+    {
+        $$ = $1 ;
+    }
+  ;
+
+ic_elements_list
+
+  :  ic_element
+     {
+        nicelements = 1u ;
+
+        $$ = $1 ;
+     }
+  |  ic_elements_list ic_element
+     {
+        nicelements++ ;
+
+        ICElement *ic_el = $1 ;
+
+        while (ic_el->Next != NULL) ic_el = ic_el->Next ;
+
+        ic_el->Next = $2 ;
+
+        $$ = $1 ;
+     }
+  ;
+
+ic_element
+
+  : RECTANGLE '(' DVALUE ',' DVALUE ',' DVALUE ',' DVALUE ')' ';'  // $3 $5 $7 $9
+    {
+        ICElement *icelement = $$ = alloc_and_init_ic_element () ;
+
+        if (icelement == NULL)
+        {
+            floorplan_error (floorplan, dimensions, scanner, "Malloc ic element failed") ;
+
+            YYABORT ;
+        }
+
+        icelement->SW_X   = $3 ;
+        icelement->SW_Y   = $5 ;
+        icelement->Length = $7 ;
+        icelement->Width  = $9 ;
+
+        align_to_grid (dimensions, icelement) ;
+
+        if (check_location (dimensions, icelement) == true)
+        {
+            sprintf (error_message, "Floorplan element is outside of the IC") ;
+
+            floorplan_error (floorplan, dimensions, scanner, error_message) ;
+
+            local_abort = true ;
+        }
     }
   ;
 
@@ -227,10 +335,32 @@ floorplan_element
 /************************* List of power values *******************************/
 /******************************************************************************/
 
+optional_power_values_list
+
+  : // Declaring the entire subsection of power values is not mandatory
+
+    {
+        PowersQueue* powers_list = $$ = alloc_and_init_powers_queue() ;
+
+        if (powers_list == NULL)
+        {
+            floorplan_error (floorplan, dimensions, scanner, "Malloc power list failed") ;
+
+            YYABORT ;
+        }
+    }
+
+  | POWER VALUES power_values_list ';' // $3
+
+    {
+        $$ = $3 ;
+    }
+  ;
+
 power_values_list
 
   : DVALUE              // $1
-                        // There must be at least one power value
+                        // Here at least one power value is mandatory
     {
         PowersQueue* powers_list = $$ = alloc_and_init_powers_queue() ;
 
@@ -264,5 +394,5 @@ void floorplan_error
 )
 {
     fprintf (stderr, "%s:%d: %s\n",
-             floorplan->FileName, floorplan_get_lineno(yyscanner), msg) ;
+        floorplan->FileName, floorplan_get_lineno(yyscanner), msg) ;
 }

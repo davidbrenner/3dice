@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 2.0 .                                 *
+ * This file is part of 3D-ICE, version 2.1 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -121,6 +121,8 @@ identifier     [[:alpha:]](\_|[[:alnum:]])*
 "//"                  BEGIN(ONE_LINE_COMMENT) ;
 "/*"                  BEGIN(MULTIPLE_LINE_COMMENT) ;
 
+"("                   return yytext[0] ;
+")"                   return yytext[0] ;
 ":"                   return yytext[0] ;
 ","                   return yytext[0] ;
 ";"                   return yytext[0] ;
@@ -128,6 +130,7 @@ identifier     [[:alpha:]](\_|[[:alnum:]])*
 "dimension"           return DIMENSION ;
 "position"            return POSITION ;
 "power"               return POWER ;
+"rectangle"           return RECTANGLE ;
 "values"              return VALUES ;
 
 {identifier}          {

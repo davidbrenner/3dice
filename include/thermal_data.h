@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 2.0 .                                 *
+ * This file is part of 3D-ICE, version 2.1 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -184,6 +184,16 @@ extern "C"
      */
 
     void free_thermal_data  (ThermalData* tdata) ;
+
+
+
+    /*! Reset the thermal state to the initial temperature
+     *
+     * \param tdata    the address of the ThermalData structure to reset
+     * \param analysis the address of the Analysis structure related to \a tdata
+     */
+
+    void reset_thermal_state (ThermalData *tdata, Analysis *analysis) ;
 
 
 

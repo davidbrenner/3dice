@@ -1,5 +1,5 @@
 /********************** ********************************************************
- * This file is part of 3D-ICE, version 2.0 .                                 *
+ * This file is part of 3D-ICE, version 2.1 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -212,7 +212,8 @@ void fill_solid_cell_conventional_heat_sink
 #ifdef PRINT_THERMAL_CELLS
     fprintf (stderr,
         "| l %6.1f w %6.1f h %6.1f "  \
-        "|                                     T % .5e  B % .5e |\n",
+        "|                                     "\
+        "                            T % .5e  B % .5e |\n",
         cell_length, cell_width, cell_height,
         thermal_cell->Top, thermal_cell->Bottom) ;
 #endif

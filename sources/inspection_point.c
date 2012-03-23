@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 2.0 .                                 *
+ * This file is part of 3D-ICE, version 2.1 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -240,16 +240,59 @@ void print_detailed_tflpel (FILE  *stream, String_t prefix, Tflpel *tflpel)
 /******************************************************************************/
 /******************************************************************************/
 
+void init_tcoolant (Tcoolant *tcoolant)
+{
+    tcoolant->Quantity = TDICE_OUTPUT_QUANTITY_NONE ;
+}
+
+/******************************************************************************/
+
+Tcoolant *alloc_and_init_tcoolant (void)
+{
+    Tcoolant *tcoolant = (Tcoolant *) malloc (sizeof(Tcoolant)) ;
+
+    if (tcoolant != NULL)
+
+        init_tcoolant (tcoolant) ;
+
+    return tcoolant ;
+}
+
+/******************************************************************************/
+
+void free_tcoolant (Tcoolant *tcoolant)
+{
+    FREE_POINTER (free, tcoolant) ;
+}
+
+/******************************************************************************/
+
+void print_detailed_tcoolant (FILE *stream, String_t prefix, Tcoolant *tcoolant)
+{
+    fprintf (stream,
+        "%sTcoolant                = %p\n",
+        prefix, tcoolant) ;
+
+    fprintf (stream,
+        "%s  Quantity              = %d\n",
+        prefix, tcoolant->Quantity) ;
+}
+
+/******************************************************************************/
+/******************************************************************************/
+/******************************************************************************/
+
 void init_inspection_point (InspectionPoint *inspection_point)
 {
-    inspection_point->Type           = TDICE_OUTPUT_TYPE_NONE ;
-    inspection_point->Instant        = TDICE_OUTPUT_INSTANT_NONE ;
-    inspection_point->FileName       = NULL ;
-    inspection_point->Pointer.Tcell  = NULL ;
-    inspection_point->Pointer.Tflp   = NULL ;
-    inspection_point->Pointer.Tflpel = NULL ;
-    inspection_point->StackElement   = NULL ;
-    inspection_point->Next           = NULL ;
+    inspection_point->Type             = TDICE_OUTPUT_TYPE_NONE ;
+    inspection_point->Instant          = TDICE_OUTPUT_INSTANT_NONE ;
+    inspection_point->FileName         = NULL ;
+    inspection_point->Pointer.Tcell    = NULL ;
+    inspection_point->Pointer.Tflp     = NULL ;
+    inspection_point->Pointer.Tflpel   = NULL ;
+    inspection_point->Pointer.Tcoolant = NULL ;
+    inspection_point->StackElement     = NULL ;
+    inspection_point->Next             = NULL ;
 }
 
 /******************************************************************************/
@@ -260,7 +303,7 @@ InspectionPoint *alloc_and_init_inspection_point (void)
 
     if (inspection_point != NULL)
 
-        init_inspection_point(inspection_point) ;
+        init_inspection_point (inspection_point) ;
 
     return inspection_point ;
 }
@@ -283,6 +326,11 @@ void free_inspection_point (InspectionPoint *inspection_point)
              && inspection_point->Pointer.Tflpel != NULL)
 
         FREE_POINTER (free_tflpel, inspection_point->Pointer.Tflpel) ;
+
+    else if (   inspection_point->Type == TDICE_OUTPUT_TYPE_TCOOLANT
+             && inspection_point->Pointer.Tcoolant != NULL)
+
+        FREE_POINTER (free_tcoolant, inspection_point->Pointer.Tcoolant) ;
 
     inspection_point->StackElement = NULL ;
 
@@ -312,7 +360,7 @@ void print_formatted_inspection_point_list
         {
             case TDICE_OUTPUT_TYPE_TCELL :
 
-                fprintf (stream, "%sT      (%s, %.1f, %.1f, \"%s\", ",
+                fprintf (stream, "%sT        (%s, %.1f, %.1f, \"%s\", ",
                     prefix, inspection_point->StackElement->Id,
                     inspection_point->Pointer.Tcell->Xval,
                     inspection_point->Pointer.Tcell->Yval,
@@ -322,7 +370,7 @@ void print_formatted_inspection_point_list
 
             case TDICE_OUTPUT_TYPE_TFLP :
 
-                fprintf (stream, "%sTflp   (%s, \"%s\", ",
+                fprintf (stream, "%sTflp     (%s, \"%s\", ",
                     prefix, inspection_point->StackElement->Id,
                     inspection_point->FileName) ;
 
@@ -342,7 +390,7 @@ void print_formatted_inspection_point_list
 
             case TDICE_OUTPUT_TYPE_TFLPEL :
 
-                fprintf (stream, "%sTflpel (%s.%s, \"%s\", ",
+                fprintf (stream, "%sTflpel   (%s.%s, \"%s\", ",
                     prefix, inspection_point->StackElement->Id,
                     inspection_point->Pointer.Tflpel->FloorplanElement->Id,
                     inspection_point->FileName) ;
@@ -369,17 +417,37 @@ void print_formatted_inspection_point_list
 
                 break ;
 
+            case TDICE_OUTPUT_TYPE_TCOOLANT :
+
+                fprintf (stream, "%sTcoolant (%s, \"%s\", ",
+                    prefix, inspection_point->StackElement->Id,
+                    inspection_point->FileName) ;
+
+                if (inspection_point->Pointer.Tcoolant->Quantity==TDICE_OUTPUT_QUANTITY_MAXIMUM)
+
+                    fprintf(stream, "maximum, ");
+
+                else if (inspection_point->Pointer.Tcoolant->Quantity==TDICE_OUTPUT_QUANTITY_MINIMUM)
+
+                    fprintf(stream, "minimum, ");
+
+                else
+
+                    fprintf(stream, "average, ");
+
+                break ;
+
             default :
 
                 fprintf (stderr, "Undefined inspection point command type %d\n", inspection_point->Type) ;
                 break ;
         }
 
-        if (inspection_point->Instant == TDICE_OUTPUT_SLOT)
+        if (inspection_point->Instant == TDICE_OUTPUT_INSTANT_SLOT)
 
             fprintf(stream, "slot );\n");
 
-        else if (inspection_point->Instant == TDICE_OUTPUT_STEP)
+        else if (inspection_point->Instant == TDICE_OUTPUT_INSTANT_STEP)
 
             fprintf(stream, "step );\n");
 
@@ -470,6 +538,22 @@ void print_detailed_inspection_point_list
                     print_detailed_tflpel
 
                         (stream, new_prefix, ipoint->Pointer.Tflpel) ;
+
+                    fprintf (stream, "%s\n", prefix) ;
+
+                break ;
+
+            case TDICE_OUTPUT_TYPE_TCOOLANT :
+
+                fprintf (stream,
+                    "%s  Pointer.Tcoolant          = %p\n",
+                    prefix, ipoint->Pointer.Tcoolant);
+
+                    fprintf (stream, "%s\n", prefix) ;
+
+                    print_detailed_tcoolant
+
+                        (stream, new_prefix, ipoint->Pointer.Tcoolant) ;
 
                     fprintf (stream, "%s\n", prefix) ;
 
@@ -637,6 +721,38 @@ Error_t generate_inspection_point_header
 
             break ;
 
+        case TDICE_OUTPUT_TYPE_TCOOLANT :
+
+            fprintf (output_stream, "%s", prefix) ;
+
+            if (inspection_point->Pointer.Tcoolant->Quantity == TDICE_OUTPUT_QUANTITY_MAXIMUM)
+
+                fprintf (output_stream, "Maximum ");
+
+            else if (inspection_point->Pointer.Tcoolant->Quantity == TDICE_OUTPUT_QUANTITY_MINIMUM)
+
+                fprintf (output_stream, "Minimum ");
+
+            else if (inspection_point->Pointer.Tcoolant->Quantity == TDICE_OUTPUT_QUANTITY_AVERAGE)
+
+                fprintf (output_stream, "Average ");
+
+            else
+            {
+                fprintf (stderr,
+                    "Inspection Point: Error reading output quantity for Tcoolant\n") ;
+
+                goto header_error ;
+            }
+
+            fprintf (output_stream,
+                "temperatures for the outlet of the channel %s\n",
+                inspection_point->StackElement->Id) ;
+
+            fprintf (output_stream, "%sTime(s) \t Temperature(K)\n", prefix) ;
+
+            break ;
+
         default :
 
             fprintf (stderr, "Error reading inspection point instruction\n") ;
@@ -781,6 +897,36 @@ Error_t generate_inspection_point_output
 
             break ;
 
+        case TDICE_OUTPUT_TYPE_TCOOLANT :
+
+            temperatures += get_cell_offset_in_stack
+
+                (dimensions,
+                 get_source_layer_offset(inspection_point->StackElement), 0, 0) ;
+
+            if (inspection_point->Pointer.Tcoolant->Quantity == TDICE_OUTPUT_QUANTITY_MAXIMUM)
+
+                 temperature = get_max_temperature_channel_outlet
+
+                     (inspection_point->StackElement->Pointer.Channel, dimensions, temperatures) ;
+
+            else if (inspection_point->Pointer.Tcoolant->Quantity == TDICE_OUTPUT_QUANTITY_MINIMUM)
+
+                 temperature = get_min_temperature_channel_outlet
+
+                     (inspection_point->StackElement->Pointer.Channel, dimensions, temperatures) ;
+
+            else
+
+                 temperature = get_avg_temperature_channel_outlet
+
+                     (inspection_point->StackElement->Pointer.Channel, dimensions, temperatures) ;
+
+            fprintf (output_stream,
+                "%5.3f \t %7.3f\n", current_time, temperature) ;
+
+            break ;
+
         default :
 
             fprintf (stderr, "Error reading inspection point instruction\n") ;
@@ -797,6 +943,87 @@ output_error :
     fclose (output_stream) ;
 
     return TDICE_FAILURE ;
+}
+
+/******************************************************************************/
+
+void fill_message_inspection_point
+(
+    InspectionPoint *inspection_point,
+    Dimensions      *dimensions,
+    Temperature_t   *temperatures,
+    NetworkMessage  *message
+)
+{
+    switch (inspection_point->Type)
+    {
+        case TDICE_OUTPUT_TYPE_TCELL :
+        {
+            Quantity_t index = get_cell_offset_in_stack
+
+                (dimensions,
+                 get_source_layer_offset(inspection_point->StackElement),
+                 inspection_point->Pointer.Tcell->RowIndex,
+                 inspection_point->Pointer.Tcell->ColumnIndex) ;
+
+            float temperature = *(temperatures + index) ;
+
+            insert_message_word (message, &temperature) ;
+
+            break ;
+        }
+        case TDICE_OUTPUT_TYPE_TFLP :
+
+            fprintf (stderr, "TFLP output in message not supperted\n") ;
+
+            break ;
+
+        case TDICE_OUTPUT_TYPE_TFLPEL :
+
+            fprintf (stderr, "TFLPEL output in message not supperted\n") ;
+
+            break ;
+
+        case TDICE_OUTPUT_TYPE_TMAP :
+        {
+            CellIndex_t n ;
+
+            n = get_number_of_rows (dimensions) ;
+
+            insert_message_word (message, &n) ;
+
+            n = get_number_of_columns (dimensions) ;
+
+            insert_message_word (message, &n) ;
+
+            Quantity_t index = get_cell_offset_in_stack
+
+                (dimensions,
+                 get_source_layer_offset(inspection_point->StackElement),
+                 0, 0) ;
+
+            FOR_EVERY_ROW (row_index, dimensions)
+            {
+                FOR_EVERY_COLUMN (column_index, dimensions)
+                {
+                    float temperature = *(temperatures + index++) ;
+
+                    insert_message_word (message, &temperature) ;
+                }
+            }
+
+            break ;
+        }
+        case TDICE_OUTPUT_TYPE_TCOOLANT :
+
+            fprintf (stderr, "TCOOLANT output in message not supperted\n") ;
+
+            break ;
+
+        default :
+
+            fprintf (stderr, "Error reading inspection point instruction\n") ;
+   }
 }
 
 /******************************************************************************/

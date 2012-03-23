@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 2.0 .                                 *
+ * This file is part of 3D-ICE, version 2.1 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -55,6 +55,7 @@ extern "C"
 #include "dimensions.h"
 #include "floorplan_element.h"
 #include "stack_element.h"
+#include "network_message.h"
 
 /******************************************************************************/
 
@@ -195,7 +196,7 @@ extern "C"
     /*! Allocates a Tflp in memory and sets its fields to their default
      *  value with #init_tflp
      *
-     * \return the pointer to a new TFlp
+     * \return the pointer to a new Tflp
      * \return \c NULL if the memory allocation fails
      */
 
@@ -264,7 +265,7 @@ extern "C"
     /*! Allocates a Tflpel in memory and sets its fields to their default
      *  value with #init_tflpel
      *
-     * \return the pointer to a new TFlp
+     * \return the pointer to a new Tflpel
      * \return \c NULL if the memory allocation fails
      */
 
@@ -299,6 +300,72 @@ extern "C"
 /******************************************************************************/
 /******************************************************************************/
 
+    /*! \struct Tcoolant
+     *
+     *  \brief Temperature of the coolant when leaving a cavity
+     */
+
+    struct Tcoolant
+    {
+        /*! The kind of quantity to be measured */
+
+        OutputQuantity_t Quantity ;
+
+    } ;
+
+    /*! Definition of the type Tcoolant */
+
+    typedef struct Tcoolant Tcoolant ;
+
+
+
+    /*! Sets all the fields of \a tcoolant to a default value (zero or \c NULL ).
+     *
+     * \param tcoolant the address of the tcoolant to initialize
+     */
+
+    void init_tcoolant (Tcoolant *tcoolant) ;
+
+
+
+    /*! Allocates a Tcoolant in memory and sets its fields to their default
+     *  value with #init_tcoolant
+     *
+     * \return the pointer to a new Tcoolant
+     * \return \c NULL if the memory allocation fails
+     */
+
+    Tcoolant *alloc_and_init_tcoolant (void) ;
+
+
+
+    /*! Frees the memory related to \a tcoolant
+     *
+     * The parametrer \a tcoolant must be a pointer previously obtained with
+     * #alloc_and_init_tcoolant
+     *
+     * \param tcoolant the address of the Tcoolant structure to free
+     */
+
+    void free_tcoolant (Tcoolant *tcoolant) ;
+
+
+
+    /*! Prints a list of detailed information about all the fields of \a tcoolant
+     *
+     * \param stream the output stream (must be already open)
+     * \param prefix a string to be printed as prefix at the beginning of each line
+     * \param tcoolant the address of the Tcoolant structure to print
+     */
+
+    void print_detailed_tcoolant
+
+        (FILE *stream, String_t prefix, Tcoolant *tcoolant) ;
+
+/******************************************************************************/
+/******************************************************************************/
+/******************************************************************************/
+
     /*! \union InspectionPoint_p
      *
      *  \brief A union of pointers to types that can be an instance of InspectionPoint
@@ -306,9 +373,10 @@ extern "C"
 
     union InspectionPoint_p
     {
-        Tcell  *Tcell ;   /*!< Pointer to a Tcell */
-        Tflp   *Tflp ;    /*!< Pointer to a Tflp */
-        Tflpel *Tflpel ;  /*!< Pointer to a Tflpel */
+        Tcell    *Tcell ;     /*!< Pointer to a Tcell */
+        Tflp     *Tflp ;      /*!< Pointer to a Tflp */
+        Tflpel   *Tflpel ;    /*!< Pointer to a Tflpel */
+        Tcoolant *Tcoolant ;  /*!< Pointer to a Tcoolant */
     } ;
 
     /*! Definition of the type InspectionPoint_p */
@@ -460,6 +528,25 @@ extern "C"
         Dimensions      *dimensions,
         Temperature_t   *temperatures,
         Time_t           current_time
+    ) ;
+
+
+
+    /*! Fills a message with the output implemented by the inspection point
+     *
+     * \param inspection_point the address of the InspectionPoint structure
+     * \param dimensions pointer to the structure containing the dimensions of the IC
+     * \param temperatures pointer to the first element of the temparature array
+     * \param message the message to fill
+
+     */
+
+    void fill_message_inspection_point
+    (
+        InspectionPoint *inspection_point,
+        Dimensions      *dimensions,
+        Temperature_t   *temperatures,
+        NetworkMessage  *message
     ) ;
 
 /******************************************************************************/

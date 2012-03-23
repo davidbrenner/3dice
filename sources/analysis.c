@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 2.0 .                                 *
+ * This file is part of 3D-ICE, version 2.1 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -84,6 +84,42 @@ void free_analysis (Analysis *analysis)
 Time_t get_simulated_time (Analysis *analysis)
 {
   return analysis->CurrentTime * analysis->StepTime ;
+}
+
+/******************************************************************************/
+
+Quantity_t get_number_of_inspection_points
+(
+    Analysis        *analysis,
+    OutputInstant_t  instant,
+    OutputType_t     type
+)
+{
+    Quantity_t number = 0u ;
+
+    InspectionPoint *list ;
+
+    if (instant == TDICE_OUTPUT_INSTANT_FINAL)
+
+        list = analysis->InspectionPointListFinal ;
+
+    else if (instant == TDICE_OUTPUT_INSTANT_STEP)
+
+        list = analysis->InspectionPointListStep ;
+
+    else if (instant == TDICE_OUTPUT_INSTANT_SLOT)
+
+        list = analysis->InspectionPointListSlot ;
+
+    else
+
+        return number ;
+
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT (InspectionPoint, ipoint, list)
+
+        if (ipoint->Type == type)   number++ ;
+
+    return number ;
 }
 
 /******************************************************************************/
@@ -249,15 +285,15 @@ void add_inspection_point_to_analysis
     InspectionPoint **list = NULL ;
 
     if (   analysis->AnalysisType == TDICE_ANALYSIS_TYPE_STEADY
-        || inspection_point->Instant == TDICE_OUTPUT_FINAL)
+        || inspection_point->Instant == TDICE_OUTPUT_INSTANT_FINAL)
 
         list = &analysis->InspectionPointListFinal ;
 
-    else if (inspection_point->Instant == TDICE_OUTPUT_SLOT)
+    else if (inspection_point->Instant == TDICE_OUTPUT_INSTANT_SLOT)
 
         list = &analysis->InspectionPointListSlot ;
 
-    else if (inspection_point->Instant == TDICE_OUTPUT_STEP)
+    else if (inspection_point->Instant == TDICE_OUTPUT_INSTANT_STEP)
 
         list = &analysis->InspectionPointListStep ;
 
@@ -312,15 +348,15 @@ Error_t generate_analysis_output
 
     InspectionPoint *list ;
 
-    if (output_instant == TDICE_OUTPUT_FINAL)
+    if (output_instant == TDICE_OUTPUT_INSTANT_FINAL)
 
         list = analysis->InspectionPointListFinal ;
 
-    else if (output_instant == TDICE_OUTPUT_STEP)
+    else if (output_instant == TDICE_OUTPUT_INSTANT_STEP)
 
         list = analysis->InspectionPointListStep ;
 
-    else if (output_instant == TDICE_OUTPUT_SLOT)
+    else if (output_instant == TDICE_OUTPUT_INSTANT_SLOT)
 
         list = analysis->InspectionPointListSlot ;
 
@@ -333,6 +369,47 @@ Error_t generate_analysis_output
         if (generate_inspection_point_output (ipoint, dimensions, temperatures, current_time) != TDICE_SUCCESS)
 
             return TDICE_FAILURE ;
+
+   return TDICE_SUCCESS ;
+}
+
+/******************************************************************************/
+
+Error_t fill_analysis_message
+(
+    Analysis        *analysis,
+    Dimensions      *dimensions,
+    Temperature_t   *temperatures,
+    OutputInstant_t  output_instant,
+    OutputType_t     type,
+    NetworkMessage  *message
+)
+{
+    InspectionPoint *list ;
+
+    if (output_instant == TDICE_OUTPUT_INSTANT_FINAL)
+
+        list = analysis->InspectionPointListFinal ;
+
+    else if (output_instant == TDICE_OUTPUT_INSTANT_STEP)
+
+        list = analysis->InspectionPointListStep ;
+
+    else if (output_instant == TDICE_OUTPUT_INSTANT_SLOT)
+
+        list = analysis->InspectionPointListSlot ;
+
+    else
+
+        return EXIT_FAILURE ;
+
+    FOR_EVERY_ELEMENT_IN_LIST_NEXT (InspectionPoint, ipoint, list)
+
+        if (type == ipoint->Type)
+
+            fill_message_inspection_point
+
+                (ipoint, dimensions, temperatures, message) ;
 
    return TDICE_SUCCESS ;
 }

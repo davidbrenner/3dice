@@ -1,5 +1,5 @@
  ##############################################################################
- # This file is part of 3D-ICE, version 2.0 .                                 #
+ # This file is part of 3D-ICE, version 2.1 .                                 #
  #                                                                            #
  # 3D-ICE is free software: you can  redistribute it and/or  modify it  under #
  # the terms of the  GNU General  Public  License as  published by  the  Free #
@@ -36,6 +36,13 @@
  # 1015 Lausanne, Switzerland           Url  : http://esl.epfl.ch/3d-ice.html #
  ##############################################################################
 
+ ##############################################################################
+ 2012-03-23 3D-ICE 2.1
+   * Reduction of memory requirement to store thermal cells
+   * New Inspection Point TCoolant for max/min/avg outlet temperature
+   * Support for irregular floorplan elements as sets of rectangles 
+   * Basic support/functionalities for remote simulations (client/server)
+   * 3D-ICE-Server and 3D-ICE-Client binaries as example of remote simulation.
  ##############################################################################
  2011-12-07 3D-ICE 2.0
    * Code enhancement

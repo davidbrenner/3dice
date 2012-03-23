@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 2.0 .                                 *
+ * This file is part of 3D-ICE, version 2.1 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -129,13 +129,13 @@ void print_formatted_materials_list
 {
     FOR_EVERY_ELEMENT_IN_LIST_NEXT (Material, material, list)
     {
+        if (material->Next == NULL)
+
+            break ;
+
         print_formatted_material (stream, prefix, material) ;
 
         fprintf (stream, "%s\n", prefix) ;
-
-        if (material->Next != NULL && material->Next->Next == NULL)
-
-            break ;
     }
 
     print_formatted_material (stream, prefix, material) ;
@@ -186,13 +186,13 @@ void print_detailed_materials_list
 {
     FOR_EVERY_ELEMENT_IN_LIST_NEXT (Material, material, list)
     {
+        if (material->Next == NULL)
+
+            break ;
+
         print_detailed_material (stream, prefix, material) ;
 
         fprintf (stream, "%s\n", prefix) ;
-
-        if (material->Next != NULL && material->Next->Next == NULL)
-
-            break ;
     }
 
     print_detailed_material (stream, prefix, material) ;

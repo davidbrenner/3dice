@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 2.0 .                                 *
+ * This file is part of 3D-ICE, version 2.1 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -231,6 +231,54 @@ extern "C"
         CellIndex_t   layer_index,
         SystemMatrix  system_matrix
     ) ;
+
+
+
+    /*! Returns the maximum temperature at the outlet of the channel
+     *
+     *  \param channel       pointer to the channel
+     *  \param dimensions    pointer to the structure storing the dimensions
+     *  \param temperatures  pointer to the temperature of the first thermal
+     *                       cell in the layer where \a channel is placed
+     *
+     *  \return The maximum temperature at the outlet of the channel
+     */
+
+    Temperature_t get_max_temperature_channel_outlet
+
+        (Channel *channel, Dimensions *dimensions, Temperature_t *temperatures) ;
+
+
+
+    /*! Returns the minimum temperature at the outlet of the channel
+     *
+     *  \param channel       pointer to the channel
+     *  \param dimensions    pointer to the structure storing the dimensions
+     *  \param temperatures  pointer to the temperature of the first thermal
+     *                       cell in the layer where \a channel is placed
+     *
+     *  \return The minimum temperature at the outlet of the channel
+     */
+
+    Temperature_t get_min_temperature_channel_outlet
+
+        (Channel *channel, Dimensions *dimensions, Temperature_t *temperatures) ;
+
+
+
+    /*! Returns the average temperature at the outlet of the channel
+     *
+     *  \param channel       pointer to the channel
+     *  \param dimensions    pointer to the structure storing the dimensions
+     *  \param temperatures  pointer to the temperature of the first thermal
+     *                       cell in the layer where \a channel is placed
+     *
+     *  \return The average temperature at the outlet of the channel
+     */
+
+    Temperature_t get_avg_temperature_channel_outlet
+
+        (Channel *channel, Dimensions *dimensions, Temperature_t *temperatures) ;
 
 /******************************************************************************/
 

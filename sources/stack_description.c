@@ -1,5 +1,5 @@
 /******************************************************************************
- * This file is part of 3D-ICE, version 2.0 .                                 *
+ * This file is part of 3D-ICE, version 2.1 .                                 *
  *                                                                            *
  * 3D-ICE is free software: you can  redistribute it and/or  modify it  under *
  * the terms of the  GNU General  Public  License as  published by  the  Free *
@@ -69,7 +69,7 @@ void init_stack_description (StackDescription* stkd)
 
 /******************************************************************************/
 
-int fill_stack_description
+Error_t fill_stack_description
 (
   StackDescription *stkd,
   Analysis         *analysis,
@@ -329,7 +329,12 @@ void fill_thermal_cell_stack_description
 
     if (analysis->AnalysisType == TDICE_ANALYSIS_TYPE_STEADY)
 
-        reset_capacities (thermal_cells, get_number_of_cells(stkd->Dimensions)) ;
+        reset_capacities
+        (
+            thermal_cells,
+              get_number_of_layers(stkd->Dimensions)
+            * get_number_of_columns(stkd->Dimensions)
+        ) ;
 }
 
 /******************************************************************************/

@@ -36,62 +36,101 @@
  * 1015 Lausanne, Switzerland           Url  : http://esl.epfl.ch/3d-ice.html *
  ******************************************************************************/
 
-#include <time.h>
+#include <string.h>
 
-#include "stack_description.h"
-#include "thermal_data.h"
-#include "analysis.h"
+#include "macros.h"
+#include "network_message.h"
 
-int main(int argc, char** argv)
+/******************************************************************************/
+
+void init_network_message (NetworkMessage *message)
 {
-    StackDescription stkd ;
-    Analysis         analysis ;
-    ThermalData      tdata ;
+    message->Memory    = calloc (MESSAGE_LENGTH, sizeof (MessageWord_t)) ;
 
-    // Checks if there are the all the arguments
-    ////////////////////////////////////////////////////////////////////////////
+    message->MaxLength = MESSAGE_LENGTH ;
 
-    if (argc != 3)
-    {
-        fprintf(stderr, "Usage: \"%s file.stk smfile.txt\"\n", argv[0]) ;
-        return EXIT_FAILURE ;
-    }
+    message->Length    = message->Memory ;
 
-    // Init StackDescription and parse the input file
-    ////////////////////////////////////////////////////////////////////////////
+    message->Type      = message->Length + 1u ;
 
-    init_stack_description (&stkd) ;
-    init_analysis          (&analysis) ;
-
-    if (fill_stack_description (&stkd, &analysis, argv[1]) != 0)
-
-        return EXIT_FAILURE ;
-
-    // Init thermal data and fill it using the StackDescription
-    ////////////////////////////////////////////////////////////////////////////
-
-    init_thermal_data (&tdata) ;
-
-    if (fill_thermal_data (&tdata, &stkd, &analysis) != 0)
-    {
-        free_analysis          (&analysis) ;
-        free_stack_description (&stkd) ;
-
-        return EXIT_FAILURE ;
-    }
-
-    // Run the simulation and print the output
-    ////////////////////////////////////////////////////////////////////////////
-
-    print_system_matrix (argv[2], tdata.SM_A) ;
-
-
-    // free all data
-    ////////////////////////////////////////////////////////////////////////////
-
-    free_thermal_data      (&tdata) ;
-    free_analysis          (&analysis) ;
-    free_stack_description (&stkd) ;
-
-    return EXIT_SUCCESS ;
+    message->Content   = message->Type   + 1u ;
 }
+
+/******************************************************************************/
+
+void free_network_message (NetworkMessage *message)
+{
+    FREE_POINTER (free, message->Memory) ;
+
+    message->Memory    = NULL ;
+    message->MaxLength = 0 ;
+    message->Length    = NULL ;
+    message->Type      = NULL ;
+    message->Content   = NULL ;
+}
+
+/******************************************************************************/
+
+void increase_message_memory (NetworkMessage *message, Quantity_t new_size)
+{
+    MessageWord_t *tmp = calloc (new_size, sizeof(MessageWord_t)) ;
+
+    memcpy (tmp, message->Memory, message->MaxLength * sizeof(MessageWord_t)) ;
+
+    free (message->Memory) ;
+
+    message->Memory    = tmp ;
+    message->MaxLength = new_size ;
+    message->Length    = message->Memory ;
+    message->Type      = message->Length + 1u ;
+    message->Content   = message->Type   + 1u ;
+}
+
+/******************************************************************************/
+
+void build_message_head (NetworkMessage *message, MessageType_t type)
+{
+    *message->Length = (MessageWord_t) 2u ;
+
+    *message->Type   = (MessageWord_t) type ;
+}
+
+/******************************************************************************/
+
+void insert_message_word
+(
+    NetworkMessage *message,
+    void           *word
+)
+{
+    if (*message->Length == message->MaxLength)
+
+        increase_message_memory (message, 2 * message->MaxLength) ;
+
+    MessageWord_t *toinsert = message->Memory + *message->Length ;
+
+    memcpy (toinsert, word, sizeof (MessageWord_t)) ;
+
+    (*message->Length)++ ;
+}
+
+/******************************************************************************/
+
+Error_t extract_message_word
+(
+    NetworkMessage *message,
+    void           *word,
+    Quantity_t      index
+)
+{
+    if (index >= (message->MaxLength - 2))
+
+        return TDICE_FAILURE ;
+
+    memcpy (word, message->Content + index, sizeof (MessageWord_t)) ;
+
+    return TDICE_SUCCESS ;
+}
+
+/******************************************************************************/
+
